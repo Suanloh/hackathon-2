@@ -5,7 +5,6 @@ import sys
 from jamaibase import JamAI
 
 # --- CONFIGURATION (read secrets safely) ---
-# Prefer Streamlit secrets, fall back to environment variables
 PROJECT_ID = (st.secrets.get("JAMAI_PROJECT_ID") if hasattr(st, "secrets") else None) or os.getenv("JAMAI_PROJECT_ID", "")
 PAT_KEY = (st.secrets.get("JAMAI_PAT_KEY") if hasattr(st, "secrets") else None) or os.getenv("JAMAI_PAT_KEY", "")
 
@@ -13,11 +12,10 @@ PROJECT_ID = PROJECT_ID.strip()
 PAT_KEY = PAT_KEY.strip()
 
 # --- ACTION TABLE IDS ---
-# Replace with your real table IDs. Avoid percent-encoding unless the platform requires it.
-TABLE_ID_TEXT = "text_received"      # update to your text-only table id
-TABLE_ID_AUDIO = "audio_receive"     # update to your audio-only table id
-TABLE_ID_PHOTO = "picture_receipt"   # update to your photo-only table id
-TABLE_ID_MULTI = "combined"          # multi-input table id
+TABLE_ID_TEXT = "text_received"
+TABLE_ID_AUDIO = "audio_receive"
+TABLE_ID_PHOTO = "picture_receipt"
+TABLE_ID_MULTI = "combined"
 
 # --- PAGE CONFIGURATION ---
 st.set_page_config(
@@ -40,9 +38,6 @@ except Exception as e:
 
 # --- HELPERS ---
 def save_uploaded_file(uploaded_file):
-    """
-    Save a Streamlit UploadedFile to a temporary file and return its path.
-    """
     try:
         suffix = f".{uploaded_file.name.split('.')[-1]}" if "." in uploaded_file.name else ""
         with tempfile.NamedTemporaryFile(delete=False, suffix=suffix) as tmp_file:
@@ -53,9 +48,6 @@ def save_uploaded_file(uploaded_file):
         return None
 
 def _get_uri_from_upload(upload_resp):
-    """
-    Extract a 'uri' from an upload response which might be a dict or an object.
-    """
     if upload_resp is None:
         return None
     if isinstance(upload_resp, dict):
@@ -64,15 +56,11 @@ def _get_uri_from_upload(upload_resp):
         return getattr(upload_resp, "uri", None)
     if hasattr(upload_resp, "url"):
         return getattr(upload_resp, "url", None)
-    # Last resort: try to read .row or .data fields
     if hasattr(upload_resp, "row") and isinstance(upload_resp.row, dict):
         return upload_resp.row.get("uri") or upload_resp.row.get("url")
     return None
 
 def _extract_row(response):
-    """
-    Safely extract a 'row' dict from a jamai.table.add_row() response.
-    """
     if response is None:
         return {}
     if isinstance(response, dict):
@@ -93,9 +81,78 @@ def _cleanup_temp(path):
     except Exception:
         pass
 
+def send_table_row(table_id, data, stream=False):
+    """
+    Attempt to send a row to jamai.table using multiple candidate method names and call signatures.
+    If none succeed, raise AttributeError with debug info.
+    """
+    table_obj = getattr(jamai, "table", None)
+    if table_obj is None:
+        raise AttributeError("jamai.table is not present on the JamAI client instance.")
+
+    # Candidate names (including nested attrs like 'rows.create')
+    candidates = [
+        "add_row","addRow","create_row","createRow","create","add","insert","insert_row",
+        "rows.create","rows.add","create_rows","createRows","add_rows","append_row"
+    ]
+
+    last_exceptions = []
+    for name in candidates:
+        parts = name.split(".")
+        attr = table_obj
+        found = True
+        for p in parts:
+            if hasattr(attr, p):
+                attr = getattr(attr, p)
+            else:
+                found = False
+                break
+        if not found or not callable(attr):
+            continue
+
+        # Try several calling signatures
+        attempts = [
+            lambda f: f(table_id=table_id, data=data, stream=stream),
+            lambda f: f(table_id=table_id, data=data),
+            lambda f: f(table_id, data, stream),
+            lambda f: f(table_id, data),
+            lambda f: f(data),
+            lambda f: f(table_id, data, stream=stream),
+        ]
+        for attempt in attempts:
+            try:
+                return attempt(attr)
+            except TypeError as te:
+                last_exceptions.append((name, "TypeError", str(te)))
+                continue
+            except Exception as e:
+                # Likely a real error from the SDK call — bubble it up (but include candidate name)
+                raise RuntimeError(f"Call to jamai.table method '{name}' raised an exception: {e}") from e
+
+    # If we get here, no candidate worked
+    # Gather debug info
+    available = sorted(dir(table_obj))
+    raise AttributeError(
+        "Could not find a compatible method to add a row on jamai.table. "
+        f"Tried candidates: {', '.join(candidates)}. "
+        f"Available attributes on jamai.table: {available}. "
+        f"Last call errors (sample): {last_exceptions[:5]}"
+    )
+
 # --- UI ---
 st.title("🚨 AERN")
 st.caption("AI Emergency Response Navigator")
+
+# Debug expander — helpful to inspect the SDK shape
+with st.expander("JamAI table debug info (click to expand)"):
+    try:
+        table_obj = getattr(jamai, "table", None)
+        st.write("jamai.table type:", type(table_obj))
+        if table_obj is not None:
+            st.write("Available attributes on jamai.table (sample):")
+            st.write(sorted(dir(table_obj)))
+    except Exception as e:
+        st.write("Error while introspecting jamai.table:", e)
 
 tab1, tab2 = st.tabs(["Single Modality Analysis", "Multi-Modality Fusion"])
 
@@ -158,14 +215,10 @@ with tab1:
                     finally:
                         _cleanup_temp(temp_path)
 
-    if st.button("Analyze Single Input", disabled=not ready_to_send):
+    if st.button("Help me fast, AERN!", disabled=not ready_to_send):
         with st.spinner(f"Consulting AERN Brain via table: {table_id_to_use}..."):
             try:
-                response = jamai.table.add_row(
-                    table_id=table_id_to_use,
-                    data=user_data,
-                    stream=False
-                )
+                response = send_table_row(table_id=table_id_to_use, data=user_data, stream=False)
                 row = _extract_row(response)
                 desc = row.get("description", "No description generated")
                 summary = row.get("summary", "No summary generated")
@@ -177,7 +230,7 @@ with tab1:
                 st.success(summary)
             except Exception as e:
                 st.error(f"An error occurred: {e}")
-                st.write("Check Table IDs and column names. If the SDK structure differs, paste the traceback for help.")
+                st.write("Check Table IDs and column names. Expand 'JamAI table debug info' above and paste its contents here if automatic method resolution failed.")
 
 # --- TAB 2: Multi-Modality Fusion ---
 with tab2:
@@ -193,7 +246,7 @@ with tab2:
         if multi_photo:
             st.image(multi_photo, width=200)
 
-    if st.button("Analyze Combined Data"):
+    if st.button("Help me in 3 resources, AERN!"):
         if not (multi_text or multi_audio or multi_photo):
             st.error("Please provide at least one input.")
         else:
@@ -233,11 +286,7 @@ with tab2:
                             finally:
                                 _cleanup_temp(temp_photo)
 
-                    response = jamai.table.add_row(
-                        table_id=TABLE_ID_MULTI,
-                        data=multi_data,
-                        stream=False
-                    )
+                    response = send_table_row(table_id=TABLE_ID_MULTI, data=multi_data, stream=False)
                     row = _extract_row(response)
                     desc = row.get("description", "No description generated")
                     summary = row.get("summary", "No summary generated")
