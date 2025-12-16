@@ -1,19 +1,23 @@
 import streamlit as st
 import tempfile
 import os
+import sys
 from jamaibase import JamAI
 
-# --- CONFIGURATION ---
-# Read credentials from environment variables (do NOT commit secrets)
-PROJECT_ID = os.getenv("proj_cbb373ee0918dc48e8a09c69", "").strip()
-PAT_KEY = os.getenv("jamai_pat_adf3eaec83074e0cd99cfa0d7a2d2ecdf97107f3705bf306", "").strip()
+# --- CONFIGURATION (read secrets safely) ---
+# Prefer Streamlit secrets, fall back to environment variables
+PROJECT_ID = (st.secrets.get("JAMAI_PROJECT_ID") if hasattr(st, "secrets") else None) or os.getenv("JAMAI_PROJECT_ID", "")
+PAT_KEY = (st.secrets.get("JAMAI_PAT_KEY") if hasattr(st, "secrets") else None) or os.getenv("JAMAI_PAT_KEY", "")
+
+PROJECT_ID = PROJECT_ID.strip()
+PAT_KEY = PAT_KEY.strip()
 
 # --- ACTION TABLE IDS ---
-# Replace these with your actual table IDs (avoid percent-encoding if possible)
-TABLE_ID_TEXT = "text%20received"
-TABLE_ID_AUDIO = "audio_receive"
-TABLE_ID_PHOTO = "picture%20receipt"
-TABLE_ID_MULTI = "combined"
+# Replace with your real table IDs. Avoid percent-encoding unless the platform requires it.
+TABLE_ID_TEXT = "text_received"      # update to your text-only table id
+TABLE_ID_AUDIO = "audio_receive"     # update to your audio-only table id
+TABLE_ID_PHOTO = "picture_receipt"   # update to your photo-only table id
+TABLE_ID_MULTI = "combined"          # multi-input table id
 
 # --- PAGE CONFIGURATION ---
 st.set_page_config(
@@ -24,7 +28,7 @@ st.set_page_config(
 
 # --- VERIFY CREDENTIALS ---
 if not PROJECT_ID or not PAT_KEY:
-    st.error("🚨 Set JAMAI_PROJECT_ID and JAMAI_PAT_KEY in environment or in Streamlit secrets.")
+    st.error("🚨 Missing JamAI credentials. Set JAMAI_PROJECT_ID and JAMAI_PAT_KEY in Streamlit secrets or environment variables.")
     st.stop()
 
 # --- INITIALIZE JAMAI CLIENT ---
@@ -34,108 +38,126 @@ except Exception as e:
     st.error(f"Failed to initialize JamAI client: {e}")
     st.stop()
 
-# --- HELPER FUNCTION: SAVE UPLOADED FILE ---
+# --- HELPERS ---
 def save_uploaded_file(uploaded_file):
     """
-    Save a Streamlit uploaded file to a temp path so the JamAI SDK can read it.
-    Returns the temp path or None on error.
+    Save a Streamlit UploadedFile to a temporary file and return its path.
     """
     try:
-        suffix = f".{uploaded_file.name.split('.')[-1]}"
+        suffix = f".{uploaded_file.name.split('.')[-1]}" if "." in uploaded_file.name else ""
         with tempfile.NamedTemporaryFile(delete=False, suffix=suffix) as tmp_file:
             tmp_file.write(uploaded_file.getvalue())
             return tmp_file.name
     except Exception as e:
-        st.error(f"Error handling file: {e}")
+        st.error(f"Error saving uploaded file: {e}")
         return None
+
+def _get_uri_from_upload(upload_resp):
+    """
+    Extract a 'uri' from an upload response which might be a dict or an object.
+    """
+    if upload_resp is None:
+        return None
+    if isinstance(upload_resp, dict):
+        return upload_resp.get("uri") or upload_resp.get("url")
+    if hasattr(upload_resp, "uri"):
+        return getattr(upload_resp, "uri", None)
+    if hasattr(upload_resp, "url"):
+        return getattr(upload_resp, "url", None)
+    # Last resort: try to read .row or .data fields
+    if hasattr(upload_resp, "row") and isinstance(upload_resp.row, dict):
+        return upload_resp.row.get("uri") or upload_resp.row.get("url")
+    return None
 
 def _extract_row(response):
     """
-    Safely extract a row dict from the SDK response object.
+    Safely extract a 'row' dict from a jamai.table.add_row() response.
     """
     if response is None:
         return {}
-    # If SDK returns a dict-like response
     if isinstance(response, dict):
-        return response.get("row", {}) or {}
-    # If SDK returns an object with attribute 'row'
+        return response.get("row") or {}
     if hasattr(response, "row"):
         try:
-            r = response.row
-            return r or {}
+            return response.row or {}
         except Exception:
             return {}
-    # Fallback: try __dict__
     if hasattr(response, "__dict__"):
         return getattr(response, "__dict__", {}).get("row", {}) or {}
     return {}
 
-# --- MAIN APP UI ---
+def _cleanup_temp(path):
+    try:
+        if path and os.path.exists(path):
+            os.remove(path)
+    except Exception:
+        pass
+
+# --- UI ---
 st.title("🚨 AERN")
 st.caption("AI Emergency Response Navigator")
 
-# --- TABS FOR DIFFERENT MODES ---
 tab1, tab2 = st.tabs(["Single Modality Analysis", "Multi-Modality Fusion"])
 
-# ==========================================
-# TAB 1: THREE SEPARATE SINGLE INPUT ACTION TABLES
-# ==========================================
+# --- TAB 1: Single Modality ---
 with tab1:
     st.header("Single Input Analysis (3 Dedicated Tables)")
-    st.info("Input will be sent to the table matching the input type.")
-    
+    st.info("Pick the modality and submit — the app routes the input to the corresponding table.")
+
     input_type = st.radio("Select Input Type", ["Text", "Audio", "Photo"], horizontal=True)
-    
+
     user_data = {}
     table_id_to_use = None
     ready_to_send = False
 
-    # --- Input and Routing Logic ---
     if input_type == "Text":
         text_input = st.text_area("Describe the emergency situation:")
         if text_input:
-            user_data = {"text": text_input}  # adjust key to match your table column
+            user_data = {"text": text_input}
             table_id_to_use = TABLE_ID_TEXT
             ready_to_send = True
 
     elif input_type == "Audio":
         audio_file = st.file_uploader("Upload Audio Recording", type=["mp3", "wav", "m4a"])
         if audio_file:
-            path = save_uploaded_file(audio_file)
-            if path:
-                table_id_to_use = TABLE_ID_AUDIO
+            temp_path = save_uploaded_file(audio_file)
+            if temp_path:
                 with st.spinner("Uploading audio..."):
                     try:
-                        uploaded = jamai.file.upload_file(path)
-                        uploaded_uri = getattr(uploaded, "uri", None) or (uploaded.get("uri") if isinstance(uploaded, dict) else None)
+                        upload_resp = jamai.file.upload_file(temp_path)
+                        uploaded_uri = _get_uri_from_upload(upload_resp)
                         if not uploaded_uri:
-                            st.error("Upload did not return a uri.")
+                            st.error("Upload succeeded but no URI was returned.")
                         else:
                             user_data = {"audio": uploaded_uri}
+                            table_id_to_use = TABLE_ID_AUDIO
                             ready_to_send = True
                     except Exception as e:
-                        st.error(f"Failed to upload audio: {e}")
+                        st.error(f"Audio upload failed: {e}")
+                    finally:
+                        _cleanup_temp(temp_path)
 
     elif input_type == "Photo":
         photo_file = st.file_uploader("Upload Scene Photo", type=["jpg", "png", "jpeg"])
         if photo_file:
-            path = save_uploaded_file(photo_file)
             st.image(photo_file, caption="Preview", width=300)
-            if path:
-                table_id_to_use = TABLE_ID_PHOTO
+            temp_path = save_uploaded_file(photo_file)
+            if temp_path:
                 with st.spinner("Uploading photo..."):
                     try:
-                        uploaded = jamai.file.upload_file(path)
-                        uploaded_uri = getattr(uploaded, "uri", None) or (uploaded.get("uri") if isinstance(uploaded, dict) else None)
+                        upload_resp = jamai.file.upload_file(temp_path)
+                        uploaded_uri = _get_uri_from_upload(upload_resp)
                         if not uploaded_uri:
-                            st.error("Upload did not return a uri.")
+                            st.error("Upload succeeded but no URI was returned.")
                         else:
                             user_data = {"photo": uploaded_uri}
+                            table_id_to_use = TABLE_ID_PHOTO
                             ready_to_send = True
                     except Exception as e:
-                        st.error(f"Failed to upload photo: {e}")
+                        st.error(f"Photo upload failed: {e}")
+                    finally:
+                        _cleanup_temp(temp_path)
 
-    # --- Execution ---
     if st.button("Analyze Single Input", disabled=not ready_to_send):
         with st.spinner(f"Consulting AERN Brain via table: {table_id_to_use}..."):
             try:
@@ -147,7 +169,7 @@ with tab1:
                 row = _extract_row(response)
                 desc = row.get("description", "No description generated")
                 summary = row.get("summary", "No summary generated")
-                
+
                 st.subheader("📋 Situation Description")
                 st.write(desc)
                 st.divider()
@@ -155,21 +177,17 @@ with tab1:
                 st.success(summary)
             except Exception as e:
                 st.error(f"An error occurred: {e}")
-                st.write("Ensure the correct Table ID and column names are configured for the selected input type.")
+                st.write("Check Table IDs and column names. If the SDK structure differs, paste the traceback for help.")
 
-# ==========================================
-# TAB 2: MULTI INPUT ACTION TABLE (REMAINS THE SAME)
-# ==========================================
+# --- TAB 2: Multi-Modality Fusion ---
 with tab2:
     st.header("Multi-Modality Fusion")
-    st.info(f"Connected to Table: `{TABLE_ID_MULTI}` (Assumes one table handles all inputs)")
-    
+    st.info(f"Connected to Table: `{TABLE_ID_MULTI}` (One table handles multiple inputs)")
+
     col1, col2 = st.columns(2)
-    
     with col1:
         multi_text = st.text_area("Text Input", height=150)
         multi_audio = st.file_uploader("Audio Input", type=["mp3", "wav", "m4a"], key="m_audio")
-    
     with col2:
         multi_photo = st.file_uploader("Photo Input", type=["jpg", "png", "jpeg"], key="m_photo")
         if multi_photo:
@@ -182,31 +200,39 @@ with tab2:
             with st.spinner("Processing multi-modal emergency data..."):
                 try:
                     multi_data = {}
-                    
                     if multi_text:
                         multi_data["text"] = multi_text
-                    
-                    if multi_audio:
-                        p_audio = save_uploaded_file(multi_audio)
-                        if p_audio:
-                            uploaded = jamai.file.upload_file(p_audio)
-                            uri_audio = getattr(uploaded, "uri", None) or (uploaded.get("uri") if isinstance(uploaded, dict) else None)
-                            if uri_audio:
-                                multi_data["audio"] = uri_audio
-                            else:
-                                st.warning("Audio uploaded but no uri returned.")
-                        
-                    if multi_photo:
-                        p_photo = save_uploaded_file(multi_photo)
-                        if p_photo:
-                            uploaded = jamai.file.upload_file(p_photo)
-                            uri_photo = getattr(uploaded, "uri", None) or (uploaded.get("uri") if isinstance(uploaded, dict) else None)
-                            if uri_photo:
-                                multi_data["photo"] = uri_photo
-                            else:
-                                st.warning("Photo uploaded but no uri returned.")
 
-                    # Send to Jamai
+                    if multi_audio:
+                        temp_audio = save_uploaded_file(multi_audio)
+                        if temp_audio:
+                            try:
+                                upload_audio = jamai.file.upload_file(temp_audio)
+                                uri_audio = _get_uri_from_upload(upload_audio)
+                                if uri_audio:
+                                    multi_data["audio"] = uri_audio
+                                else:
+                                    st.warning("Audio uploaded but no uri returned.")
+                            except Exception as e:
+                                st.error(f"Audio upload failed: {e}")
+                            finally:
+                                _cleanup_temp(temp_audio)
+
+                    if multi_photo:
+                        temp_photo = save_uploaded_file(multi_photo)
+                        if temp_photo:
+                            try:
+                                upload_photo = jamai.file.upload_file(temp_photo)
+                                uri_photo = _get_uri_from_upload(upload_photo)
+                                if uri_photo:
+                                    multi_data["photo"] = uri_photo
+                                else:
+                                    st.warning("Photo uploaded but no uri returned.")
+                            except Exception as e:
+                                st.error(f"Photo upload failed: {e}")
+                            finally:
+                                _cleanup_temp(temp_photo)
+
                     response = jamai.table.add_row(
                         table_id=TABLE_ID_MULTI,
                         data=multi_data,
@@ -215,12 +241,11 @@ with tab2:
                     row = _extract_row(response)
                     desc = row.get("description", "No description generated")
                     summary = row.get("summary", "No summary generated")
-                    
+
                     st.subheader("📋 Integrated Description")
                     st.write(desc)
                     st.divider()
                     st.subheader("📢 Strategic Summary")
                     st.success(summary)
-
                 except Exception as e:
                     st.error(f"An error occurred during fusion: {e}")
