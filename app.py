@@ -14,10 +14,39 @@ st.set_page_config(
     layout="wide"
 )
 
-# Custom CSS for emergency response theme
+# =============================================================================
+# UI DESIGN & CSS (FORCE VERSION)
+# =============================================================================
 st.markdown("""
 <style>
+    /* 1. 强制修改全局背景颜色 */
+    .stApp {
+        background-color: #faf5f5 !important; /* 加了 !important 强制变红 */
+    }
+    
+    /* 2. 标题颜色 */
+    h1, h2, h3 {
+        color: #d32f2f !important;
+    }
+
+    /* 3. 按钮样式 (普通按钮) */
     .stButton>button {
+        background-color: white !important;
+        color: #333 !important;
+        border: 2px solid #ffcccc !important;
+        height: 80px;
+        font-size: 20px !important;
+        font-weight: bold !important;
+        border-radius: 12px !important;
+    }
+    
+    /* 4. 针对 type="primary" 的红色按钮进行特训 */
+    /* 当你写 st.button(..., type="primary") 时会用到这个 */
+    div[data-testid="stButton"] > button[kind="primary"] {
+        background-color: #ff4444 !important;
+        color: white !important;
+        border: none !important;
+        box-shadow: 0 4px 6px rgba(0,0,0,0.2);
         height: 3em;
         width: 100%;
         border-radius: 10px;
@@ -328,7 +357,21 @@ st.divider()
 # SIDEBAR - DEBUG AND CONFIGURATION
 # =============================================================================
 with st.sidebar:
-    st. header("⚙️ System Configuration")
+    current_path = os.path.dirname(os.path.abspath(__file__))
+    image_path = os.path.join(current_path, "images", "usm_flood_map.jpg") 
+    
+    if os.path.exists(image_path):
+        st.image(image_path, caption="📍 Current Location: USM", use_container_width=True)
+    else:
+        # 如果还是找不到，用备用网络地图
+        st.error("Local image not found, using alternative map.")
+        st.image("https://maps.googleapis.com/maps/api/staticmap?center=USM+Penang&zoom=15&size=600x400&maptype=roadmap&markers=color:red%7Clabel:S%7CUSM", use_container_width=True)
+    # -------------------
+
+    st.success("🟢 System Online: Connected to HQ")
+    st.divider()
+    # -------------------------------------
+    st.header("⚙️ System Configuration")
     
     # Credentials status
     with st.expander("🔑 Credentials Status", expanded=False):
