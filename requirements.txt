@@ -3,3 +3,4 @@ jamaibase
 pydantic
 requests
 pillow
+pycountry
