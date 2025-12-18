@@ -335,7 +335,6 @@ with st.sidebar:
     if os.path.exists(image_path):
         st.image(image_path, caption="📍 Current Location: USM", use_container_width=True)
     else:
-        # 如果还是找不到，用备用网络地图
         st.error("Local image not found, using alternative map.")
         st.image("https://maps.googleapis.com/maps/api/staticmap?center=USM+Penang&zoom=15&size=600x400&maptype=roadmap&markers=color:red%7Clabel:S%7CUSM", use_container_width=True)
     # -------------------
@@ -343,69 +342,14 @@ with st.sidebar:
     st.success("🟢 System Online: Connected to Help Center")
     st.divider()
     # -------------------------------------
-    st.header("⚙️ System Configuration")
-    
-    # # Credentials status
-    # with st.expander("🔑 Credentials Status", expanded=False):
-    #     st.write(f"**API Key:** {'✅ Loaded' if API_KEY else '❌ Missing'}")
-    #     st.write(f"**Project ID:** {PROJECT_ID if PROJECT_ID else '❌ Missing'}")
-    
-    # # Table IDs
-    # with st.expander("📋 Table Configuration", expanded=False):
-    #     st.write("**Configured Table IDs:**")
-    #     for key, value in TABLE_IDS. items():
-    #         st.code(f"{key}: {value}")
-    
-    # # List available tables
-    # if st.button("🔍 List Available Action Tables"):
-    #     with st.spinner("Fetching tables..."):
-    #         tables = list_action_tables()
-    #         if tables:
-    #             st.success(f"Found {len(tables)} tables:")
-    #             for table in tables: 
-    #                 st.write(f"• {table}")
-    #         else:
-    #             st.info("No tables found or unable to connect")
-    
-    # # Schema Inspector
-    # st.markdown("### 🔬 Schema Inspector")
-    # inspect_table = st.selectbox(
-    #     "Select table to inspect:",
-    #     options=list(TABLE_IDS.keys()),
-    #     format_func=lambda x: f"{x. upper()} ({TABLE_IDS[x]})"
-    # )
-    
-    # if st.button("Inspect Schema"):
-    #     table_id = TABLE_IDS[inspect_table]
-    #     with st.spinner(f"Inspecting {table_id}..."):
-    #         schema = get_table_schema(table_id)
-    #         if schema:
-    #             st.success("Schema retrieved!")
-                
-    #             # Display input columns
-    #             if hasattr(schema, "cols") and schema.cols:
-    #                 st.write("**Input Columns:**")
-    #                 for col in schema.cols:
-    #                     st.write(f"• {col.id} ({col.dtype})")
-                
-    #             # Display output columns
-    #             if hasattr(schema, "chat_cols") and schema.chat_cols:
-    #                 st.write("**Output Columns:**")
-    #                 for col in schema.chat_cols:
-    #                     st. write(f"• {col. id} ({col.dtype})")
-                
-    #             with st.expander("Raw Schema Data"):
-    #                 st.write(schema)
-    #         else:
-    #             st. error("Failed to retrieve schema")
 
 # =============================================================================
 # MAIN TABS
 # =============================================================================
 tab_emergency, tab_multi, tab_chat = st.tabs([
     "🔥 Emergency Response",
-    "🔀 Quick AI Guidance",
-    "💬 AI Chat Assistant"
+    "🔀 Quick Guidance",
+    "💬 CareLink"
 ])
 
 # =============================================================================
@@ -415,7 +359,7 @@ with tab_emergency:
     st.header("⚡ Quick Emergency Response")
     st.info("Select your emergency type for rapid assessment and guidance")
     
-    # 1. 初始化 Session State (如果还没有记忆，先创建一个空的)
+    # 1. initialize Session State (如果还没有记忆，先创建一个空的)
     if "selected_emergency" not in st.session_state:
         st.session_state.selected_emergency = None
 
