@@ -15,143 +15,28 @@ st.set_page_config(
     layout="wide"
 )
 
-# =============================================================================
-# UI DESIGN & CSS (ADAPTIVE THEME)
-# =============================================================================
+# Custom CSS for emergency response theme
 st.markdown("""
 <style>
-    /* LIGHT MODE (default) */
-    @media (prefers-color-scheme: light) {
-        .stApp {
-            background-color: #faf5f5 !important;
-        }
-        
-        /* Main content area - REMOVED SPACE */
-        .main . block-container {
-            background-color: #faf5f5 !important;
-        }
-        
-        /* Tabs styling - REMOVED SPACES */
-        .stTabs [data-baseweb="tab-list"] {
-            background-color: #faf5f5 ! important;
-        }
-        
-        .stTabs [data-baseweb="tab-panel"] {
-            background-color: #faf5f5 !important;
-        }
-        
-        h1, h2, h3 {
-            color: #d32f2f !important;
-        }
-        
-        .stButton>button {
-            background-color: white !important;
-            color: #333 !important;
-            border: 2px solid #ffcccc ! important;
-        }
-        
-        .stChatMessage {
-            background-color: #ffffff !important;
-            border: 1px solid #ffcccc !important;
-            color: #333333 !important;
-        }
-        
-        .stChatMessage [data-testid="stMarkdownContainer"] {
-            color: #333333 !important;
-        }
-        
-        /* Text areas and inputs */
-        .stTextArea textarea, .stTextInput input {
-            background-color: white !important;
-            color: #333 ! important;
-        }
-        
-        /* Info, warning, success boxes */
-        .stAlert {
-            background-color: #ffffff !important;
-        }
-    }
-    
-    /* DARK MODE */
-    @media (prefers-color-scheme: dark) {
-        .stApp {
-            background-color: #1a1a1a !important;
-        }
-        
-        /* Main content area - REMOVED SPACE */
-        .main . block-container {
-            background-color: #1a1a1a !important;
-        }
-        
-        /* Tabs styling - REMOVED SPACES */
-        . stTabs [data-baseweb="tab-list"] {
-            background-color: #1a1a1a !important;
-        }
-        
-        .stTabs [data-baseweb="tab-panel"] {
-            background-color: #1a1a1a !important;
-        }
-        
-        h1, h2, h3 {
-            color: #ff6b6b !important;
-        }
-        
-        .stButton>button {
-            background-color: #2d2d2d !important;
-            color: #ffffff !important;
-            border: 2px solid #ff4444 !important;
-        }
-        
-        .stChatMessage {
-            background-color: #2d2d2d !important;
-            border: 1px solid #ff4444 !important;
-            color: #ffffff !important;
-        }
-        
-        .stChatMessage [data-testid="stMarkdownContainer"] {
-            color: #ffffff !important;
-        }
-        
-        /* Text areas and inputs */
-        .stTextArea textarea, .stTextInput input {
-            background-color: #2d2d2d !important;
-            color: #ffffff !important;
-        }
-    }
-    
-    /* Common styles for both modes */
     .stButton>button {
-        height: 80px;
-        font-size: 20px !important;
-        font-weight: bold !important;
-        border-radius: 12px !important;
-    }
-    
-    div[data-testid="stButton"] > button[kind="primary"] {
-        background-color: #ff4444 !important;
-        color: white !important;
-        border: none !important;
-        box-shadow: 0 4px 6px rgba(0,0,0,0.2);
         height: 3em;
         width: 100%;
         border-radius: 10px;
-        font-weight:  bold;
-        font-size:  20px;
+        font-weight: bold;
+        font-size: 20px;
     }
-    
-    . stChatMessage {
+    .stChatMessage {
         border-radius: 15px;
         padding: 10px;
     }
-    
     .emergency-button {
         background-color: #ff4444;
         color: white;
         padding: 20px;
         border-radius: 15px;
         font-size: 24px;
-        font-weight: bold;
-        margin: 10px;
+        font-weight:  bold;
+        margin:  10px;
     }
 </style>
 """, unsafe_allow_html=True)
