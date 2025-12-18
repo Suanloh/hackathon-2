@@ -532,7 +532,7 @@ with tab_multi:
         if multi_photo: 
             st.image(multi_photo, caption="Preview", width=200)
     
-    if st.button("🔀 Let's me help you", use_container_width=True):
+    if st.button("🔀 Let us help you", use_container_width=True):
         if not (multi_text or multi_audio or multi_photo):
             st.error("Please provide at least one input")
         else:
@@ -588,14 +588,14 @@ with tab_multi:
                             data = parse_response_data(response)
                             
                             # Display results
-                            st.success("✅ Multi-Modal Analysis Complete")
+                            st.success("✅ Analysis Complete")
 
                             # Use correct field names from the API (same as Emergency tab)
                             description = get_field_value(data, "input_summary", "No description available")
                             summary = get_field_value(data, "diagonise", "No summary available")
 
-                            # Create a more visual layout
-                            st.markdown("### 🔍 Integrated Analysis")
+                            # # Create a more visual layout
+                            # st.markdown("### 🔍 Integrated Analysis")
 
                             # Use columns for better layout
                             col1, col2 = st.columns([2, 1])
@@ -606,13 +606,10 @@ with tab_multi:
                                 st.warning(summary)
                                 
                                 # THEN show situation assessment
-                                st.markdown("#### 📋 Situation Assessment")
+                                st.markdown("#### 📋 Situation Overview")
                                 st.info(description)
 
                             with col2:
-                                st.markdown("#### 📊 Analysis Summary")
-                                st.metric("Input Types", len([k for k in multi_data.keys()]))
-                                st.metric("Confidence", "High ✅")
                                 st.button("📞 Emergency Services", type="primary", use_container_width=True)
                                 st.button("📍 Share Location", use_container_width=True)
 
