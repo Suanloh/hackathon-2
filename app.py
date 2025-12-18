@@ -9,16 +9,45 @@ from jamaibase.protocol import MultiRowAddRequest
 # =============================================================================
 # PAGE CONFIGURATION
 # =============================================================================
-st. set_page_config(
+st.set_page_config(
     page_title="AERN | AI Emergency Response Navigator",
     page_icon="🚨",
     layout="wide"
 )
 
-# Custom CSS for emergency response theme
+# =============================================================================
+# UI DESIGN & CSS (FORCE VERSION)
+# =============================================================================
 st.markdown("""
 <style>
+    /* 1. 强制修改全局背景颜色 */
+    .stApp {
+        background-color: #faf5f5 !important; /* 加了 !important 强制变红 */
+    }
+    
+    /* 2. 标题颜色 */
+    h1, h2, h3 {
+        color: #d32f2f !important;
+    }
+
+    /* 3. 按钮样式 (普通按钮) */
     .stButton>button {
+        background-color: white !important;
+        color: #333 !important;
+        border: 2px solid #ffcccc !important;
+        height: 80px;
+        font-size: 20px !important;
+        font-weight: bold !important;
+        border-radius: 12px !important;
+    }
+    
+    /* 4. 针对 type="primary" 的红色按钮进行特训 */
+    /* 当你写 st.button(..., type="primary") 时会用到这个 */
+    div[data-testid="stButton"] > button[kind="primary"] {
+        background-color: #ff4444 !important;
+        color: white !important;
+        border: none !important;
+        box-shadow: 0 4px 6px rgba(0,0,0,0.2);
         height: 3em;
         width: 100%;
         border-radius: 10px;
@@ -35,7 +64,7 @@ st.markdown("""
         padding: 20px;
         border-radius: 15px;
         font-size: 24px;
-        font-weight:  bold;
+        font-weight: bold;
         margin:  10px;
     }
 </style>
@@ -84,8 +113,8 @@ def load_secrets():
         "tables": {
             "text": table_text_id,
             "audio": table_audio_id,
-            "photo":  table_photo_id,
-            "multi": table_multi_id,
+            "photo": table_photo_id,
+            "multi":  table_multi_id,
             "chat": table_chat_id
         }
     }
@@ -116,9 +145,9 @@ else:
 def save_uploaded_file(uploaded_file):
     """Save uploaded file to temporary location"""
     try:
-        suffix = f".{uploaded_file.name. split('.')[-1]}" if "." in uploaded_file.name else ""
+        suffix = f".{uploaded_file.name.split('.')[-1]}" if "." in uploaded_file.name else ""
         with tempfile. NamedTemporaryFile(delete=False, suffix=suffix) as tmp_file:
-            tmp_file. write(uploaded_file.getvalue())
+            tmp_file.write(uploaded_file.getvalue())
             return tmp_file.name
     except Exception as e:
         st.error(f"Error saving file: {e}")
@@ -150,13 +179,13 @@ def parse_response_data(response):
         return {}
     
     # Handle list responses
-    if isinstance(response, list) and response:  
+    if isinstance(response, list) and response:
         response = response[0]
     
     # Handle dict responses
     if isinstance(response, dict):
         # Check for common patterns
-        if "row" in response:  
+        if "row" in response:
             return parse_response_data(response["row"])
         if "rows" in response and isinstance(response["rows"], list) and response["rows"]:
             return parse_response_data(response["rows"][0])
@@ -204,46 +233,65 @@ def parse_columns_data(columns):
     
     return result
 
+def extract_chat_completion_content(value):
+    """Extract content from ChatCompletion object or dict"""
+    # If value is a ChatCompletion object, extract the content
+    if hasattr(value, "choices") and value.choices:
+        try:
+            return value.choices[0].message.content
+        except (AttributeError, IndexError):
+            pass
+    
+    # If value is a dict with ChatCompletion structure
+    if isinstance(value, dict) and "choices" in value: 
+        try:
+            choices = value["choices"]
+            if isinstance(choices, list) and choices:
+                first_choice = choices[0]
+                if isinstance(first_choice, dict) and "message" in first_choice:
+                    return first_choice["message"]. get("content")
+                elif hasattr(first_choice, "message"):
+                    return first_choice. message.content
+        except (AttributeError, IndexError, KeyError):
+            pass
+    
+    # If it's already a string, return it
+    if isinstance(value, str):
+        return value if value else None
+    
+    # Convert to string if needed
+    return str(value) if value is not None else None
+
 def get_field_value(data, field_name, default=None):
-    """Safely extract field value from response data"""
+    """Safely extract field value from response data with comprehensive search"""
     if not isinstance(data, dict):
         return default
     
     # Direct lookup
     if field_name in data:
         value = data[field_name]
-        
-        # If value is a ChatCompletion object, extract the content
-        if hasattr(value, "choices") and value.choices:
-            try:
-                return value.choices[0].message.content
-            except (AttributeError, IndexError):
-                pass
-        
-        # If value is a dict with ChatCompletion structure
-        if isinstance(value, dict) and "choices" in value:
-            try:  
-                choices = value["choices"]
-                if isinstance(choices, list) and choices:
-                    first_choice = choices[0]
-                    if isinstance(first_choice, dict) and "message" in first_choice:
-                        return first_choice["message"]. get("content")
-                    elif hasattr(first_choice, "message"):
-                        return first_choice.message.content
-            except (AttributeError, IndexError, KeyError):
-                pass
-        
-        # If it's already a string, return it
-        if isinstance(value, str):
-            return value if value else default
-        
-        # Convert to string if needed
-        return str(value) if value is not None else default
+        extracted = extract_chat_completion_content(value)
+        return extracted if extracted else default
+    
+    # Try alternative field names (case-insensitive and with variations)
+    alternative_names = [
+        field_name.lower(),
+        field_name.upper(),
+        field_name.replace("_", " "),
+        field_name.replace(" ", "_"),
+    ]
+    
+    for key, value in data.items():
+        if key.lower() in [name.lower() for name in alternative_names]:
+            extracted = extract_chat_completion_content(value)
+            return extracted if extracted else default
     
     # Recursive search for nested structures
     for key, value in data.items():
-        if isinstance(value, dict) and field_name in value:
-            return get_field_value({"field": value[field_name]}, "field", default)
+        if isinstance(value, dict):
+            result = get_field_value(value, field_name, None)
+            if result is not None:
+                return result
     
     return default
 
@@ -300,7 +348,7 @@ def get_table_schema(table_id):
 st.title("🚨 AERN - AI Emergency Response Navigator")
 st.markdown("""
 **AI-Powered Emergency Response System** — AERN uses advanced AI to analyze emergency situations 
-in real-time through text, audio, and images.  Get instant situational assessments, 
+in real-time through text, audio, and images. Get instant situational assessments, 
 recommended actions, and connect with emergency services faster. 
 """)
 
@@ -310,7 +358,21 @@ st.divider()
 # SIDEBAR - DEBUG AND CONFIGURATION
 # =============================================================================
 with st.sidebar:
-    st. header("⚙️ System Configuration")
+    current_path = os.path.dirname(os.path.abspath(__file__))
+    image_path = os.path.join(current_path, "images", "usm_flood_map.jpg") 
+    
+    if os.path.exists(image_path):
+        st.image(image_path, caption="📍 Current Location: USM", use_container_width=True)
+    else:
+        # 如果还是找不到，用备用网络地图
+        st.error("Local image not found, using alternative map.")
+        st.image("https://maps.googleapis.com/maps/api/staticmap?center=USM+Penang&zoom=15&size=600x400&maptype=roadmap&markers=color:red%7Clabel:S%7CUSM", use_container_width=True)
+    # -------------------
+
+    st.success("🟢 System Online: Connected to HQ")
+    st.divider()
+    # -------------------------------------
+    st.header("⚙️ System Configuration")
     
     # # Credentials status
     # with st.expander("🔑 Credentials Status", expanded=False):
@@ -442,7 +504,7 @@ with tab_emergency:
             if emergency_audio or emergency_photo:
                 # Use multi-modal table
                 table_id = TABLE_IDS["multi"]
-                st.info(f"Using multi-modal table: {table_id}")
+                st.info(f"Using multi-modal table:  {table_id}")
                 
                 emergency_data = {}
                 
@@ -495,16 +557,17 @@ with tab_emergency:
                             # Display results
                             st.success("✅ Emergency Report Processed")
 
-                            description = get_field_value(data, "description", "No description available")
-                            summary = get_field_value(data, "summary", "No summary available")
+                            # Use correct field names from the API
+                            description = get_field_value(data, "input_summary", "No description available")
+                            summary = get_field_value(data, "diagonise", "No summary available")
 
                             st.subheader("📋 Situation Assessment")
-                            st.markdown(f"**{description}**")
+                            st.markdown(description)
 
                             st.divider()
 
                             st.subheader("🚨 Recommended Actions")
-                            st.warning(summary)  # Changed from st.info to st.warning for urgency
+                            st.warning(summary)
 
                             # Optional: Add action buttons based on the analysis
                             col1, col2, col3 = st.columns(3)
@@ -520,7 +583,7 @@ with tab_emergency:
                                 st.json(data)
                         else: 
                             st.error("JamAI client not available")
-                    except Exception as e: 
+                    except Exception as e:
                         st.error(f"Error processing emergency:  {e}")
             else:
                 st.warning("Please provide emergency details")
@@ -637,7 +700,7 @@ with tab_multi:
 
                             with st.expander("🔧 Debug Information"):
                                 st.json(data)
-                        else:
+                        else: 
                             st.error("JamAI client not available")
                     except Exception as e:
                         st.error(f"Multi-modal analysis error: {e}")
@@ -645,7 +708,7 @@ with tab_multi:
 # =============================================================================
 # TAB 3: AI CHAT ASSISTANT
 # =============================================================================
-with tab_chat: 
+with tab_chat:  
     st.header("💬 AI Chat Assistant")
     st.info("Ask questions and get real-time guidance from the AI assistant")
     
@@ -716,5 +779,5 @@ with tab_chat:
 # =============================================================================
 # FOOTER
 # =============================================================================
-st. divider()
+st.divider()
 st.caption("🚨 AERN - AI Emergency Response Navigator | Powered by Insomniac")
