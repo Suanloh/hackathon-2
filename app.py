@@ -609,11 +609,12 @@ with tab_multi:
                             col1, col2 = st.columns([2, 1])
 
                             with col1:
-                                st.markdown("#### 📋 Situation Assessment")
-                                st.info(description)
-                                
                                 st.markdown("#### 🚨 Safety Recommendations")
                                 st.warning(summary)
+                                
+                                st.markdown("#### 📋 Situation Assessment")
+                                st.info(description)
+                            
 
                             with col2:
                                 st.markdown("#### 📊 Analysis Summary")
