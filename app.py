@@ -14,27 +14,23 @@ st.set_page_config(
     page_icon="🚨",
     layout="wide"
 )
-
-
 st.markdown("""
     <style>
-        /* 隐藏右上角的 Deploy/Fork 按钮 */
-        .stAppDeployButton {
-            display: none;
+        /* 隐藏顶部所有的按钮 (Manage app, Fork, Deploy) */
+        [data-testid="stHeaderActionElements"] {
+            display: none !important;
         }
         
-        /* 隐藏右上角的“三个点”菜单 (如果你连设置菜单都不想让人看) */
-        /* [data-testid="stToolbar"] {visibility: hidden !important;} */
+        /* 如果你想连右上角的三个点(菜单)也藏起来，解开下面这行的注释 */
+        /* [data-testid="stToolbar"] { visibility: hidden !important; } */
         
-        /* 隐藏整个顶部 Header (会让页面顶部没有空白，更像原生 App) */
-        /* header {visibility: hidden !important;} */
-        
-        /* 隐藏底部的 "Made with Streamlit" */
-        footer {visibility: hidden !important;}
+        /* 隐藏底部的 Made with Streamlit */
+        footer {
+            visibility: hidden !important;
+        }
     </style>
 """, unsafe_allow_html=True)
 
-# ... 接下来是你的主代码 ...
 
 # Custom CSS for emergency response theme
 st.markdown("""
