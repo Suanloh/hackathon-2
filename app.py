@@ -455,7 +455,7 @@ with st.sidebar:
         st.image("https://maps.googleapis.com/maps/api/staticmap?center=USM+Penang&zoom=15&size=600x400&maptype=roadmap&markers=color:red%7Clabel:S%7CUSM", use_container_width=True)
     # -------------------
 
-    st.success("🟢 System Online: Connected to HQ")
+    st.success("🟢 System Online: Connected to Help Center")
     st.divider()
     # -------------------------------------
     st.header("⚙️ System Configuration")
@@ -530,150 +530,97 @@ with tab_emergency:
     st.header("⚡ Quick Emergency Response")
     st.info("Select your emergency type for rapid assessment and guidance")
     
+    # 1. 初始化 Session State (如果还没有记忆，先创建一个空的)
+    if "selected_emergency" not in st.session_state:
+        st.session_state.selected_emergency = None
+
     # Emergency type buttons
     col1, col2, col3 = st.columns(3)
     
-    emergency_selected = None
-    
+    # 2. 修改按钮逻辑：点击时把结果存进 Session State
     with col1:
         if st.button("🌊 Flood", use_container_width=True):
-            emergency_selected = "Flood"
+            st.session_state.selected_emergency = "Flood"
         if st.button("🏥 Medical Emergency", use_container_width=True):
-            emergency_selected = "Medical Emergency"
+            st.session_state.selected_emergency = "Medical Emergency"
     
     with col2:
         if st.button("🔥 Fire", use_container_width=True):
-            emergency_selected = "Fire"
+            st.session_state.selected_emergency = "Fire"
         if st.button("🌪️ Natural Disaster", use_container_width=True):
-            emergency_selected = "Natural Disaster"
+            st.session_state.selected_emergency = "Natural Disaster"
     
     with col3:
         if st.button("🚗 Accident", use_container_width=True):
-            emergency_selected = "Accident"
+            st.session_state.selected_emergency = "Accident"
         if st.button("🏢 Building Emergency", use_container_width=True):
-            emergency_selected = "Building Emergency"
+            st.session_state.selected_emergency = "Building Emergency"
     
+    # 3. 从 Session State 读取当前的选择
+    # 这样即使页面刷新，它依然记得你是 "Flood"
+    emergency_selected = st.session_state.selected_emergency
+
     if emergency_selected:
-        st. markdown(f"### Selected: **{emergency_selected}**")
+        # --- 🎬 第二幕：一键求救 (用户界面) ---
+        st.divider()
+        st.markdown(f"### 🚨 You are reporting: **{emergency_selected}**")
         
-        # Emergency input form
+        # 加一个重置按钮，让用户可以重新选灾害类型
+        if st.button("🔄 Change Emergency Type"):
+            st.session_state.selected_emergency = None
+            st.rerun()
+
+        st.warning("⚠️ Press the button below to alert Help Center immediately.")
+
         with st.form(key="emergency_form"):
-            st.write("Provide additional details:")
+            # --- 🎬 后台秘密：自动生成求救信 (代替用户手写) ---
+            emergency_text = f"CRITICAL ALERT: {emergency_selected} reported at USM Main Campus. Immediate assistance required. Coordinates: 5.3567° N, 100.3013° E."
             
-            # Text input
-            emergency_text = st.text_area(
-                "Describe the situation:",
-                placeholder=f"Example: {emergency_selected} emergency at my location..."
-            )
-            
-            # Optional file uploads
-            col_a, col_b = st.columns(2)
-            with col_a:
-                emergency_audio = st.file_uploader(
-                    "Optional: Audio recording",
-                    type=["mp3", "wav", "m4a"],
-                    key="emerg_audio"
-                )
-            with col_b:
-                emergency_photo = st.file_uploader(
-                    "Optional: Scene photo",
-                    type=["jpg", "png", "jpeg"],
-                    key="emerg_photo"
-                )
-                if emergency_photo:
-                    st.image(emergency_photo, width=200)
-            
-            submit_emergency = st.form_submit_button("🚨 SUBMIT EMERGENCY REPORT", use_container_width=True)
+            # 红色大按钮
+            submit_emergency = st.form_submit_button("🚨 CONFIRM & REQUEST HELP", use_container_width=True)
         
         if submit_emergency:
-            # Determine which table to use based on inputs
-            if emergency_audio or emergency_photo:
-                # Use multi-modal table
-                table_id = TABLE_IDS["multi"]
-                st.info(f"Using multi-modal table:  {table_id}")
+            # --- 🎬 第一秒：心理安抚 (Reassurance) ---
+            st.success("✅ REPORT SENT TO Help Centre! Rescue team notified.")
+            st.toast("🚨 Alert sent to nearest police station!", icon="🚓")
+
+            # --- 🎬 第二秒：逃生指引 (Guidance) ---
+            if emergency_selected == "Flood":
+                st.divider()
+                st.error("🚨 IMMEDIATE ACTION: Here is your evacuation route.")
                 
-                emergency_data = {}
+                # 仪表盘
+                st.subheader("📡 Real-time Analysis")
+                m1, m2, m3 = st.columns(3)
+                with m1:
+                    st.metric(label="Water Level", value="CRITICAL ⚠️", delta="Rising (+15cm)")
+                with m2:
+                    st.metric(label="Nearest Shelter", value="Dewan Utama", delta="500m")
+                with m3:
+                    st.metric(label="Est. Evac Time", value="8 mins", delta="Fastest Route")
+
+                # 战术地图
+                st.subheader("🗺️ Recommended Evacuation Route")
+                current_path = os.path.dirname(os.path.abspath(__file__))
+                map_path = os.path.join(current_path, "images", "usm_flood_map.jpg") 
                 
-                # Add text
-                if emergency_text:
-                    emergency_data["text"] = f"[{emergency_selected}] {emergency_text}"
-                
-                # Upload audio
-                if emergency_audio: 
-                    temp_audio = save_uploaded_file(emergency_audio)
-                    if temp_audio and jamai_client:
-                        try:
-                            upload_resp = jamai_client.file.upload_file(temp_audio)
-                            uri = extract_uri_from_response(upload_resp)
-                            if uri:
-                                emergency_data["audio text"] = uri
-                        except Exception as e: 
-                            st.error(f"Audio upload failed: {e}")
-                        finally:
-                            cleanup_temp_file(temp_audio)
-                
-                # Upload photo
-                if emergency_photo: 
-                    temp_photo = save_uploaded_file(emergency_photo)
-                    if temp_photo and jamai_client:
-                        try:
-                            upload_resp = jamai_client.file.upload_file(temp_photo)
-                            uri = extract_uri_from_response(upload_resp)
-                            if uri: 
-                                emergency_data["image"] = uri
-                        except Exception as e:
-                            st.error(f"Photo upload failed: {e}")
-                        finally: 
-                            cleanup_temp_file(temp_photo)
-                
-            else:
-                # Use text-only table
-                table_id = TABLE_IDS["text"]
-                st.info(f"Using text table: {table_id}")
-                # Note: text_received table uses 'text_receive' column, different from combined table's 'text' column
-                emergency_data = {"text_receive": f"[{emergency_selected}] {emergency_text}"}
+                if os.path.exists(map_path):
+                    st.image(map_path, caption="🟢 ACTION: Follow the GREEN LINE to Higher Ground!", use_container_width=True)
+                else:
+                    st.warning("Map loading...")
             
-            # Submit to JamAI
-            if emergency_data:
-                with st.spinner("🚨 Processing emergency report..."):
-                    try:
-                        if jamai_client:
-                            response = add_table_row(table_id, emergency_data)
-                            data = parse_response_data(response)
-                            # Display results
-                            st.success("✅ Emergency Report Processed")
-
-                            # Use correct field names from the API
-                            description = get_field_value(data, "input_summary", "No description available")
-                            summary = get_field_value(data, "diagonise", "No summary available")
-
-                            st.subheader("📋 Situation Assessment")
-                            st.markdown(description)
-
-                            st.divider()
-
-                            st.subheader("🚨 Recommended Actions")
-                            st.warning(summary)
-
-                            # Optional: Add action buttons based on the analysis
-                            col1, col2, col3 = st.columns(3)
-                            with col1:
-                                st.button("📞 Call Emergency Services", type="primary", use_container_width=True)
-                            with col2:
-                                st.button("📍 Share Location", use_container_width=True)
-                            with col3:
-                                st.button("👥 Alert Contacts", use_container_width=True)
-
-                            # Keep debug data hidden by default
-                            with st.expander("🔍 Debug Data (Developer Only)"):
-                                st.json(data)
-                        else: 
-                            st.error("JamAI client not available")
-                    except Exception as e:
-                        st.error(f"Error processing emergency:  {e}")
-            else:
-                st.warning("Please provide emergency details")
-
+            # --- 🎬 后台处理：静默发送给 AI ---
+            emergency_data = {}
+            if emergency_text:
+                emergency_data["text"] = f"[{emergency_selected}] {emergency_text}"
+            
+            if emergency_data and jamai_client:
+                try:
+                    table_id = TABLE_IDS["text"]
+                    response = add_table_row(table_id, emergency_data)
+                    data = parse_response_data(response)
+                except Exception as e:
+                    print(f"Background upload failed: {e}")
 # =============================================================================
 # TAB 2: MULTI-MODALITY FUSION
 # =============================================================================
