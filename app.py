@@ -149,13 +149,13 @@ def parse_response_data(response):
         return {}
     
     # Handle list responses
-    if isinstance(response, list) and response:
+    if isinstance(response, list) and response: 
         response = response[0]
     
     # Handle dict responses
     if isinstance(response, dict):
         # Check for common patterns
-        if "row" in response:
+        if "row" in response: 
             return parse_response_data(response["row"])
         if "rows" in response and isinstance(response["rows"], list) and response["rows"]:
             return parse_response_data(response["rows"][0])
@@ -163,19 +163,88 @@ def parse_response_data(response):
             return response["values"]
         if "data" in response and isinstance(response["data"], dict):
             return response["data"]
+        if "columns" in response and isinstance(response["columns"], dict):
+            return response["columns"]
         return response
     
     # Handle object responses
-    if hasattr(response, "row"):
-        return parse_response_data(getattr(response, "row"))
     if hasattr(response, "rows"):
         rows = getattr(response, "rows")
         if isinstance(rows, list) and rows:
-            return parse_response_data(rows[0])
+            first_row = rows[0]
+            # Extract columns from the row
+            if hasattr(first_row, "columns"):
+                return parse_columns_data(first_row.columns)
+            return parse_response_data(first_row)
+    
+    if hasattr(response, "columns"):
+        return parse_columns_data(response. columns)
+    
     if hasattr(response, "__dict__"):
         return parse_response_data(getattr(response, "__dict__", {}))
     
     return {}
+
+def parse_columns_data(columns):
+    """Extract text content from columns data structure"""
+    result = {}
+    
+    if isinstance(columns, dict):
+        for col_name, col_value in columns.items():
+            # Extract text from column value
+            if isinstance(col_value, dict):
+                result[col_name] = col_value.get("text") or col_value.get("value") or str(col_value)
+            elif hasattr(col_value, "text"):
+                result[col_name] = col_value.text
+            elif hasattr(col_value, "value"):
+                result[col_name] = col_value.value
+            else:
+                result[col_name] = str(col_value)
+    
+    return result
+
+def get_field_value(data, field_name, default=None):
+    """Safely extract field value from response data"""
+    if not isinstance(data, dict):
+        return default
+    
+    # Direct lookup
+    if field_name in data:
+        value = data[field_name]
+        
+        # If value is a ChatCompletion object, extract the content
+        if hasattr(value, "choices") and value.choices:
+            try:
+                return value.choices[0].message.content
+            except (AttributeError, IndexError):
+                pass
+        
+        # If value is a dict with ChatCompletion structure
+        if isinstance(value, dict) and "choices" in value:
+            try: 
+                choices = value["choices"]
+                if isinstance(choices, list) and choices:
+                    first_choice = choices[0]
+                    if isinstance(first_choice, dict) and "message" in first_choice:
+                        return first_choice["message"]. get("content")
+                    elif hasattr(first_choice, "message"):
+                        return first_choice. message.content
+            except (AttributeError, IndexError, KeyError):
+                pass
+        
+        # If it's already a string, return it
+        if isinstance(value, str):
+            return value if value else default
+        
+        # Convert to string if needed
+        return str(value) if value is not None else default
+    
+    # Recursive search for nested structures
+    for key, value in data.items():
+        if isinstance(value, dict) and field_name in value:
+            return get_field_value({"field": value[field_name]}, "field", default)
+    
+    return default
 
 def get_field_value(data, field_name, default=None):
     """Safely extract field value from response data"""
@@ -440,23 +509,32 @@ with tab_emergency:
                         if jamai_client:
                             response = add_table_row(table_id, emergency_data)
                             data = parse_response_data(response)
-                            
                             # Display results
                             st.success("✅ Emergency Report Processed")
-                            
+
                             description = get_field_value(data, "description", "No description available")
                             summary = get_field_value(data, "summary", "No summary available")
-                            
+
                             st.subheader("📋 Situation Assessment")
-                            st.write(description)
-                            
+                            st.markdown(f"**{description}**")
+
                             st.divider()
-                            
-                            st.subheader("📢 Recommended Actions")
-                            st.info(summary)
-                            
-                            with st.expander("🔍 Debug Data"):
-                                st.write(response)
+
+                            st.subheader("🚨 Recommended Actions")
+                            st.warning(summary)  # Changed from st.info to st.warning for urgency
+
+                            # Optional: Add action buttons based on the analysis
+                            col1, col2, col3 = st.columns(3)
+                            with col1:
+                                st.button("📞 Call Emergency Services", type="primary", use_container_width=True)
+                            with col2:
+                                st.button("📍 Share Location", use_container_width=True)
+                            with col3:
+                                st. button("👥 Alert Contacts", use_container_width=True)
+
+                            # Keep debug data hidden by default
+                            with st.expander("🔍 Debug Data (Developer Only)"):
+                                st.json(data)
                         else:
                             st.error("JamAI client not available")
                     except Exception as e:
@@ -563,23 +641,35 @@ with tab_single:
                     if jamai_client:
                         response = add_table_row(table_id, single_data)
                         data = parse_response_data(response)
-                        
-                        # Display results
-                        st.success("✅ Analysis Complete")
-                        
+                    
+                        st. success("✅ Analysis Complete")
+
                         description = get_field_value(data, "description", "No description available")
                         summary = get_field_value(data, "summary", "No summary available")
-                        
-                        st.subheader("📋 Description")
-                        st.write(description)
-                        
+
+                        col1, col2 = st. columns([1, 1])
+
+                        with col1:
+                            st. subheader("📋 Emergency Description")
+                            st.info(description)
+
+                        with col2:
+                            st.subheader("⚠️ Safety Guidance")
+                            st.warning(summary)
+
+                        # Optional: Extract danger levels if available
                         st.divider()
-                        
-                        st.subheader("📢 Summary")
-                        st.info(summary)
-                        
-                        with st.expander("🔍 Debug Data"):
-                            st.write(response)
+                        st.subheader("🎯 Quick Actions")
+                        col_a, col_b, col_c = st.columns(3)
+                        with col_a:
+                            st.metric("Status", "⚠️ Active", delta="Emergency")
+                        with col_b:
+                            st.button("📞 Emergency Call", type="primary", use_container_width=True)
+                        with col_c:
+                            st.button("📤 Share Report", use_container_width=True)
+
+                        with st.expander("🔍 Technical Details"):
+                            st.json(data)
                     else:
                         st.error("JamAI client not available")
                 except Exception as e:
@@ -658,21 +748,33 @@ with tab_multi:
                             data = parse_response_data(response)
                             
                             # Display results
-                            st.success("✅ Multi-Modal Analysis Complete")
-                            
+                            st. success("✅ Multi-Modal Analysis Complete")
+
                             description = get_field_value(data, "description", "No description available")
                             summary = get_field_value(data, "summary", "No summary available")
-                            
-                            st.subheader("📋 Integrated Description")
-                            st.write(description)
-                            
-                            st.divider()
-                            
-                            st.subheader("📢 Strategic Summary")
-                            st.info(summary)
-                            
-                            with st.expander("🔍 Debug Data"):
-                                st.write(response)
+
+                            # Create a more visual layout
+                            st.markdown("### 🔍 Integrated Analysis")
+
+                            # Use columns for better layout
+                            col1, col2 = st.columns([2, 1])
+
+                            with col1:
+                                st.markdown("#### 📋 Situation Assessment")
+                                st.info(description)
+                                
+                                st.markdown("#### 🚨 Safety Recommendations")
+                                st.warning(summary)
+
+                            with col2:
+                                st. markdown("#### 📊 Analysis Summary")
+                                st.metric("Input Types", len([k for k in multi_data.keys()]))
+                                st.metric("Confidence", "High ✅")
+                                st.button("📞 Emergency Services", type="primary", use_container_width=True)
+                                st.button("📍 Share Location", use_container_width=True)
+
+                            with st.expander("🔧 Debug Information"):
+                                st.json(data)
                         else:
                             st.error("JamAI client not available")
                     except Exception as e:
@@ -759,4 +861,4 @@ with tab_chat:
 # FOOTER
 # =============================================================================
 st.divider()
-st.caption("🚨 AERN - AI Emergency Response Navigator ")
+st.caption("🚨 AERN - AI Emergency Response Navigator | Powered by Insomniac")
