@@ -1,2 +1,5 @@
 # .gitignore
 .streamlit/
+app_old.py
+__pycache__/
+*.pyc
