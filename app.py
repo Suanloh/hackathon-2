@@ -642,4 +642,37 @@ with tab_chat:
 # FOOTER
 # =============================================================================
 st.divider()
-st.caption("🚨 AERN - AI Emergency Response Navigator | Powered by Insomniac")
+st.markdown("""
+    <style>
+        .footer-text {
+            text-align: center;
+            color: #888; /* 灰色，在黑白背景都看得清 */
+            font-size: 12px;
+            padding-bottom: 20px;
+        }
+        .disclaimer-box {
+            /* 关键修改：使用 rgba 透明度 */
+            /* 红色背景，但在黑色底色上只会显出淡淡的红光 */
+            background-color: rgba(255, 80, 80, 0.1); 
+            
+            /* 边框让它更有科技感 */
+            border: 1px solid rgba(255, 80, 80, 0.3);
+            
+            /* 文字颜色：使用亮红色/粉色，在深色背景下更容易阅读 */
+            color: #ff8a80;
+            
+            padding: 10px;
+            border-radius: 8px;
+            display: inline-block;
+            max-width: 600px;
+        }
+    </style>
+    
+    <div class="footer-text">
+        <p>🚨 <b>AERN - AI Emergency Response Navigator</b> | Powered by Insomniac</p>
+        <div class="disclaimer-box">
+            ⚠️ <b>DISCLAIMER:</b> This system is a prototype for demonstration only. <br>
+            AI responses may be inaccurate. In real life-threatening situations, <b>ALWAYS CALL 999</b>.
+        </div>
+    </div>
+""", unsafe_allow_html=True)
