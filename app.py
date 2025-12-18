@@ -8,7 +8,7 @@ from jamaibase.protocol import MultiRowAddRequest
 # =============================================================================
 # PAGE CONFIGURATION
 # =============================================================================
-st.set_page_config(
+st. set_page_config(
     page_title="AERN | AI Emergency Response Navigator",
     page_icon="🚨",
     layout="wide"
@@ -34,8 +34,8 @@ st.markdown("""
         padding: 20px;
         border-radius: 15px;
         font-size: 24px;
-        font-weight: bold;
-        margin: 10px;
+        font-weight:  bold;
+        margin:  10px;
     }
 </style>
 """, unsafe_allow_html=True)
@@ -44,7 +44,7 @@ st.markdown("""
 # SECRETS AND CREDENTIALS LOADING
 # =============================================================================
 def load_secrets():
-    """Load secrets from .streamlit/secrets.toml or environment variables"""
+    """Load secrets from . streamlit/secrets.toml or environment variables"""
     # Try Streamlit secrets first
     api_key = None
     project_id = None
@@ -58,7 +58,7 @@ def load_secrets():
     if hasattr(st, "secrets") and st.secrets:
         api_key = st.secrets.get("JAMAI_API_KEY") or st.secrets.get("JAMAI_PAT_KEY")
         project_id = st.secrets.get("PROJECT_ID") or st.secrets.get("JAMAI_PROJECT_ID")
-        table_text_id = st.secrets.get("TABLE_TEXT_ID")
+        table_text_id = st. secrets.get("TABLE_TEXT_ID")
         table_audio_id = st.secrets.get("TABLE_AUDIO_ID")
         table_photo_id = st.secrets.get("TABLE_PHOTO_ID")
         table_multi_id = st.secrets.get("TABLE_MULTI_ID")
@@ -75,15 +75,15 @@ def load_secrets():
     table_audio_id = table_audio_id or os.getenv("TABLE_AUDIO_ID") or "audio_receive"
     table_photo_id = table_photo_id or os.getenv("TABLE_PHOTO_ID") or "picture_receipt"
     table_multi_id = table_multi_id or os.getenv("TABLE_MULTI_ID") or "combined"
-    table_chat_id = table_chat_id or os.getenv("TABLE_CHAT_ID") or "chat"
+    table_chat_id = table_chat_id or os. getenv("TABLE_CHAT_ID") or "chat"
     
     return {
-        "api_key": api_key.strip() if api_key else None,
+        "api_key": api_key. strip() if api_key else None,
         "project_id": project_id.strip() if project_id else None,
         "tables": {
             "text": table_text_id,
             "audio": table_audio_id,
-            "photo": table_photo_id,
+            "photo":  table_photo_id,
             "multi": table_multi_id,
             "chat": table_chat_id
         }
@@ -106,7 +106,7 @@ if API_KEY and PROJECT_ID:
         st.sidebar.error(f"❌ JamAI Connection Failed: {e}")
         jamai_client = None
 else:
-    st.sidebar.warning("⚠️ JamAI credentials not configured")
+    st.sidebar. warning("⚠️ JamAI credentials not configured")
 
 # =============================================================================
 # HELPER FUNCTIONS
@@ -115,9 +115,9 @@ else:
 def save_uploaded_file(uploaded_file):
     """Save uploaded file to temporary location"""
     try:
-        suffix = f".{uploaded_file.name.split('.')[-1]}" if "." in uploaded_file.name else ""
-        with tempfile.NamedTemporaryFile(delete=False, suffix=suffix) as tmp_file:
-            tmp_file.write(uploaded_file.getvalue())
+        suffix = f".{uploaded_file.name. split('.')[-1]}" if "." in uploaded_file.name else ""
+        with tempfile. NamedTemporaryFile(delete=False, suffix=suffix) as tmp_file:
+            tmp_file. write(uploaded_file.getvalue())
             return tmp_file.name
     except Exception as e:
         st.error(f"Error saving file: {e}")
@@ -125,10 +125,10 @@ def save_uploaded_file(uploaded_file):
 
 def cleanup_temp_file(file_path):
     """Clean up temporary file"""
-    try:
+    try: 
         if file_path and os.path.exists(file_path):
             os.remove(file_path)
-    except Exception:
+    except Exception: 
         pass
 
 def extract_uri_from_response(response):
@@ -149,13 +149,13 @@ def parse_response_data(response):
         return {}
     
     # Handle list responses
-    if isinstance(response, list) and response:
+    if isinstance(response, list) and response:  
         response = response[0]
     
     # Handle dict responses
     if isinstance(response, dict):
         # Check for common patterns
-        if "row" in response:
+        if "row" in response:  
             return parse_response_data(response["row"])
         if "rows" in response and isinstance(response["rows"], list) and response["rows"]:
             return parse_response_data(response["rows"][0])
@@ -163,19 +163,45 @@ def parse_response_data(response):
             return response["values"]
         if "data" in response and isinstance(response["data"], dict):
             return response["data"]
+        if "columns" in response and isinstance(response["columns"], dict):
+            return response["columns"]
         return response
     
     # Handle object responses
-    if hasattr(response, "row"):
-        return parse_response_data(getattr(response, "row"))
     if hasattr(response, "rows"):
         rows = getattr(response, "rows")
         if isinstance(rows, list) and rows:
-            return parse_response_data(rows[0])
+            first_row = rows[0]
+            # Extract columns from the row
+            if hasattr(first_row, "columns"):
+                return parse_columns_data(first_row.columns)
+            return parse_response_data(first_row)
+    
+    if hasattr(response, "columns"):
+        return parse_columns_data(response. columns)
+    
     if hasattr(response, "__dict__"):
         return parse_response_data(getattr(response, "__dict__", {}))
     
     return {}
+
+def parse_columns_data(columns):
+    """Extract text content from columns data structure"""
+    result = {}
+    
+    if isinstance(columns, dict):
+        for col_name, col_value in columns.items():
+            # Extract text from column value
+            if isinstance(col_value, dict):
+                result[col_name] = col_value.get("text") or col_value.get("value") or str(col_value)
+            elif hasattr(col_value, "text"):
+                result[col_name] = col_value.text
+            elif hasattr(col_value, "value"):
+                result[col_name] = col_value.value
+            else:
+                result[col_name] = str(col_value)
+    
+    return result
 
 def get_field_value(data, field_name, default=None):
     """Safely extract field value from response data"""
@@ -185,12 +211,38 @@ def get_field_value(data, field_name, default=None):
     # Direct lookup
     if field_name in data:
         value = data[field_name]
-        return value if value is not None else default
+        
+        # If value is a ChatCompletion object, extract the content
+        if hasattr(value, "choices") and value.choices:
+            try:
+                return value.choices[0].message.content
+            except (AttributeError, IndexError):
+                pass
+        
+        # If value is a dict with ChatCompletion structure
+        if isinstance(value, dict) and "choices" in value:
+            try:  
+                choices = value["choices"]
+                if isinstance(choices, list) and choices:
+                    first_choice = choices[0]
+                    if isinstance(first_choice, dict) and "message" in first_choice:
+                        return first_choice["message"]. get("content")
+                    elif hasattr(first_choice, "message"):
+                        return first_choice.message.content
+            except (AttributeError, IndexError, KeyError):
+                pass
+        
+        # If it's already a string, return it
+        if isinstance(value, str):
+            return value if value else default
+        
+        # Convert to string if needed
+        return str(value) if value is not None else default
     
     # Recursive search for nested structures
-    for value in data.values():
+    for key, value in data.items():
         if isinstance(value, dict) and field_name in value:
-            return value[field_name]
+            return get_field_value({"field": value[field_name]}, "field", default)
     
     return default
 
@@ -212,7 +264,7 @@ def add_table_row(table_id, row_data):
             request=request
         )
         return response
-    except Exception as e:
+    except Exception as e: 
         raise RuntimeError(f"Failed to add table row: {e}")
 
 def list_action_tables():
@@ -220,10 +272,10 @@ def list_action_tables():
     if jamai_client is None:
         return []
     
-    try:
-        response = jamai_client.table.list_tables(table_type="action")
+    try: 
+        response = jamai_client. table.list_tables(table_type="action")
         if hasattr(response, "items"):
-            return [table.id for table in response.items]
+            return [table. id for table in response.items]
         return []
     except Exception as e:
         st.error(f"Error listing tables: {e}")
@@ -234,8 +286,8 @@ def get_table_schema(table_id):
     if jamai_client is None:
         return None
     
-    try:
-        response = jamai_client.table.get_table(table_type="action", table_id=table_id)
+    try: 
+        response = jamai_client. table.get_table(table_type="action", table_id=table_id)
         return response
     except Exception as e:
         st.error(f"Error getting table schema: {e}")
@@ -247,8 +299,8 @@ def get_table_schema(table_id):
 st.title("🚨 AERN - AI Emergency Response Navigator")
 st.markdown("""
 **AI-Powered Emergency Response System** — AERN uses advanced AI to analyze emergency situations 
-in real-time through text, audio, and images. Get instant situational assessments, 
-recommended actions, and connect with emergency services faster.
+in real-time through text, audio, and images.  Get instant situational assessments, 
+recommended actions, and connect with emergency services faster. 
 """)
 
 st.divider()
@@ -257,7 +309,7 @@ st.divider()
 # SIDEBAR - DEBUG AND CONFIGURATION
 # =============================================================================
 with st.sidebar:
-    st.header("⚙️ System Configuration")
+    st. header("⚙️ System Configuration")
     
     # Credentials status
     with st.expander("🔑 Credentials Status", expanded=False):
@@ -267,7 +319,7 @@ with st.sidebar:
     # Table IDs
     with st.expander("📋 Table Configuration", expanded=False):
         st.write("**Configured Table IDs:**")
-        for key, value in TABLE_IDS.items():
+        for key, value in TABLE_IDS. items():
             st.code(f"{key}: {value}")
     
     # List available tables
@@ -276,7 +328,7 @@ with st.sidebar:
             tables = list_action_tables()
             if tables:
                 st.success(f"Found {len(tables)} tables:")
-                for table in tables:
+                for table in tables: 
                     st.write(f"• {table}")
             else:
                 st.info("No tables found or unable to connect")
@@ -286,7 +338,7 @@ with st.sidebar:
     inspect_table = st.selectbox(
         "Select table to inspect:",
         options=list(TABLE_IDS.keys()),
-        format_func=lambda x: f"{x.upper()} ({TABLE_IDS[x]})"
+        format_func=lambda x: f"{x. upper()} ({TABLE_IDS[x]})"
     )
     
     if st.button("Inspect Schema"):
@@ -306,19 +358,18 @@ with st.sidebar:
                 if hasattr(schema, "chat_cols") and schema.chat_cols:
                     st.write("**Output Columns:**")
                     for col in schema.chat_cols:
-                        st.write(f"• {col.id} ({col.dtype})")
+                        st. write(f"• {col. id} ({col.dtype})")
                 
                 with st.expander("Raw Schema Data"):
                     st.write(schema)
             else:
-                st.error("Failed to retrieve schema")
+                st. error("Failed to retrieve schema")
 
 # =============================================================================
 # MAIN TABS
 # =============================================================================
-tab_emergency, tab_single, tab_multi, tab_chat = st.tabs([
+tab_emergency, tab_multi, tab_chat = st.tabs([
     "🔥 Emergency Response",
-    "📝 Single Modality Analysis",
     "🔀 Multi-Modality Fusion",
     "💬 AI Chat Assistant"
 ])
@@ -354,7 +405,7 @@ with tab_emergency:
             emergency_selected = "Building Emergency"
     
     if emergency_selected:
-        st.markdown(f"### Selected: **{emergency_selected}**")
+        st. markdown(f"### Selected: **{emergency_selected}**")
         
         # Emergency input form
         with st.form(key="emergency_form"):
@@ -399,7 +450,7 @@ with tab_emergency:
                     emergency_data["text"] = f"[{emergency_selected}] {emergency_text}"
                 
                 # Upload audio
-                if emergency_audio:
+                if emergency_audio: 
                     temp_audio = save_uploaded_file(emergency_audio)
                     if temp_audio and jamai_client:
                         try:
@@ -407,23 +458,23 @@ with tab_emergency:
                             uri = extract_uri_from_response(upload_resp)
                             if uri:
                                 emergency_data["audio text"] = uri
-                        except Exception as e:
+                        except Exception as e: 
                             st.error(f"Audio upload failed: {e}")
                         finally:
                             cleanup_temp_file(temp_audio)
                 
                 # Upload photo
-                if emergency_photo:
+                if emergency_photo: 
                     temp_photo = save_uploaded_file(emergency_photo)
                     if temp_photo and jamai_client:
                         try:
                             upload_resp = jamai_client.file.upload_file(temp_photo)
                             uri = extract_uri_from_response(upload_resp)
-                            if uri:
+                            if uri: 
                                 emergency_data["image"] = uri
                         except Exception as e:
                             st.error(f"Photo upload failed: {e}")
-                        finally:
+                        finally: 
                             cleanup_temp_file(temp_photo)
                 
             else:
@@ -440,153 +491,41 @@ with tab_emergency:
                         if jamai_client:
                             response = add_table_row(table_id, emergency_data)
                             data = parse_response_data(response)
-                            
                             # Display results
                             st.success("✅ Emergency Report Processed")
-                            
+
                             description = get_field_value(data, "description", "No description available")
                             summary = get_field_value(data, "summary", "No summary available")
-                            
+
                             st.subheader("📋 Situation Assessment")
-                            st.write(description)
-                            
+                            st.markdown(f"**{description}**")
+
                             st.divider()
-                            
-                            st.subheader("📢 Recommended Actions")
-                            st.info(summary)
-                            
-                            with st.expander("🔍 Debug Data"):
-                                st.write(response)
-                        else:
+
+                            st.subheader("🚨 Recommended Actions")
+                            st.warning(summary)  # Changed from st.info to st.warning for urgency
+
+                            # Optional: Add action buttons based on the analysis
+                            col1, col2, col3 = st.columns(3)
+                            with col1:
+                                st.button("📞 Call Emergency Services", type="primary", use_container_width=True)
+                            with col2:
+                                st.button("📍 Share Location", use_container_width=True)
+                            with col3:
+                                st.button("👥 Alert Contacts", use_container_width=True)
+
+                            # Keep debug data hidden by default
+                            with st.expander("🔍 Debug Data (Developer Only)"):
+                                st.json(data)
+                        else: 
                             st.error("JamAI client not available")
-                    except Exception as e:
-                        st.error(f"Error processing emergency: {e}")
+                    except Exception as e: 
+                        st.error(f"Error processing emergency:  {e}")
             else:
                 st.warning("Please provide emergency details")
 
 # =============================================================================
-# TAB 2: SINGLE MODALITY ANALYSIS
-# =============================================================================
-with tab_single:
-    st.header("📝 Single Input Analysis")
-    st.info("Analyze a single type of input (text, audio, or photo)")
-    
-    input_type = st.radio(
-        "Select input type:",
-        ["Text", "Audio", "Photo"],
-        horizontal=True
-    )
-    
-    with st.form(key="single_modality_form"):
-        single_data = {}
-        
-        if input_type == "Text":
-            text_input = st.text_area(
-                "Describe the emergency:",
-                height=150,
-                placeholder="Enter detailed description..."
-            )
-        elif input_type == "Audio":
-            audio_file = st.file_uploader(
-                "Upload audio recording:",
-                type=["mp3", "wav", "m4a"],
-                key="single_audio"
-            )
-        else:  # Photo
-            photo_file = st.file_uploader(
-                "Upload scene photo:",
-                type=["jpg", "png", "jpeg"],
-                key="single_photo"
-            )
-        
-        analyze_single = st.form_submit_button("Analyze", use_container_width=True)
-    
-    if analyze_single:
-        ready_to_submit = False
-        
-        if input_type == "Text":
-            if text_input:
-                # Note: text_received table uses 'text_receive' column
-                single_data = {"text_receive": text_input}
-                table_id = TABLE_IDS["text"]
-                ready_to_submit = True
-            else:
-                st.warning("Please enter text description")
-        
-        elif input_type == "Audio":
-            if audio_file:
-                temp_audio = save_uploaded_file(audio_file)
-                if temp_audio and jamai_client:
-                    with st.spinner("Uploading audio..."):
-                        try:
-                            upload_resp = jamai_client.file.upload_file(temp_audio)
-                            uri = extract_uri_from_response(upload_resp)
-                            if uri:
-                                single_data = {"audio": uri}
-                                table_id = TABLE_IDS["audio"]
-                                ready_to_submit = True
-                            else:
-                                st.error("Audio upload failed: No URI returned")
-                        except Exception as e:
-                            st.error(f"Audio upload error: {e}")
-                        finally:
-                            cleanup_temp_file(temp_audio)
-            else:
-                st.warning("Please upload an audio file")
-        
-        else:  # Photo
-            if photo_file:
-                st.image(photo_file, caption="Uploaded Photo", width=300)
-                temp_photo = save_uploaded_file(photo_file)
-                if temp_photo and jamai_client:
-                    with st.spinner("Uploading photo..."):
-                        try:
-                            upload_resp = jamai_client.file.upload_file(temp_photo)
-                            uri = extract_uri_from_response(upload_resp)
-                            if uri:
-                                single_data = {"picture": uri}
-                                table_id = TABLE_IDS["photo"]
-                                ready_to_submit = True
-                            else:
-                                st.error("Photo upload failed: No URI returned")
-                        except Exception as e:
-                            st.error(f"Photo upload error: {e}")
-                        finally:
-                            cleanup_temp_file(temp_photo)
-            else:
-                st.warning("Please upload a photo")
-        
-        # Submit to JamAI
-        if ready_to_submit:
-            with st.spinner(f"Analyzing with table: {table_id}"):
-                try:
-                    if jamai_client:
-                        response = add_table_row(table_id, single_data)
-                        data = parse_response_data(response)
-                        
-                        # Display results
-                        st.success("✅ Analysis Complete")
-                        
-                        description = get_field_value(data, "description", "No description available")
-                        summary = get_field_value(data, "summary", "No summary available")
-                        
-                        st.subheader("📋 Description")
-                        st.write(description)
-                        
-                        st.divider()
-                        
-                        st.subheader("📢 Summary")
-                        st.info(summary)
-                        
-                        with st.expander("🔍 Debug Data"):
-                            st.write(response)
-                    else:
-                        st.error("JamAI client not available")
-                except Exception as e:
-                    st.error(f"Analysis error: {e}")
-
-# =============================================================================
-# TAB 3: MULTI-MODALITY FUSION
+# TAB 2: MULTI-MODALITY FUSION
 # =============================================================================
 with tab_multi:
     st.header("🔀 Multi-Modality Fusion")
@@ -609,7 +548,7 @@ with tab_multi:
             key="multi_photo"
         )
         if multi_photo:
-            st.image(multi_photo, caption="Preview", width=200)
+            st. image(multi_photo, caption="Preview", width=200)
     
     if st.button("🔀 Analyze Combined Data", use_container_width=True):
         if not (multi_text or multi_audio or multi_photo):
@@ -622,7 +561,7 @@ with tab_multi:
                 multi_data["text"] = multi_text
             
             # Upload audio
-            if multi_audio:
+            if multi_audio: 
                 temp_audio = save_uploaded_file(multi_audio)
                 if temp_audio and jamai_client:
                     try:
@@ -632,7 +571,7 @@ with tab_multi:
                             multi_data["audio text"] = uri
                     except Exception as e:
                         st.error(f"Audio upload failed: {e}")
-                    finally:
+                    finally: 
                         cleanup_temp_file(temp_audio)
             
             # Upload photo
@@ -642,56 +581,68 @@ with tab_multi:
                     try:
                         upload_resp = jamai_client.file.upload_file(temp_photo)
                         uri = extract_uri_from_response(upload_resp)
-                        if uri:
+                        if uri: 
                             multi_data["image"] = uri
                     except Exception as e:
-                        st.error(f"Photo upload failed: {e}")
-                    finally:
+                        st. error(f"Photo upload failed:  {e}")
+                    finally: 
                         cleanup_temp_file(temp_photo)
             
             # Submit to JamAI
             if multi_data:
                 with st.spinner("Processing multi-modal data..."):
                     try:
-                        if jamai_client:
+                        if jamai_client: 
                             response = add_table_row(TABLE_IDS["multi"], multi_data)
                             data = parse_response_data(response)
                             
                             # Display results
                             st.success("✅ Multi-Modal Analysis Complete")
-                            
+
                             description = get_field_value(data, "description", "No description available")
                             summary = get_field_value(data, "summary", "No summary available")
-                            
-                            st.subheader("📋 Integrated Description")
-                            st.write(description)
-                            
-                            st.divider()
-                            
-                            st.subheader("📢 Strategic Summary")
-                            st.info(summary)
-                            
-                            with st.expander("🔍 Debug Data"):
-                                st.write(response)
+
+                            # Create a more visual layout
+                            st.markdown("### 🔍 Integrated Analysis")
+
+                            # Use columns for better layout
+                            col1, col2 = st.columns([2, 1])
+
+                            with col1:
+                                st.markdown("#### 📋 Situation Assessment")
+                                st.info(description)
+                                
+                                st.markdown("#### 🚨 Safety Recommendations")
+                                st.warning(summary)
+
+                            with col2:
+                                st.markdown("#### 📊 Analysis Summary")
+                                st.metric("Input Types", len([k for k in multi_data. keys()]))
+                                st.metric("Confidence", "High ✅")
+                                st.button("📞 Emergency Services", type="primary", use_container_width=True)
+                                st.button("📍 Share Location", use_container_width=True)
+
+                            with st.expander("🔧 Debug Information"):
+                                st.json(data)
                         else:
                             st.error("JamAI client not available")
                     except Exception as e:
                         st.error(f"Multi-modal analysis error: {e}")
 
 # =============================================================================
-# TAB 4: AI CHAT ASSISTANT
+# TAB 3: AI CHAT ASSISTANT
 # =============================================================================
-with tab_chat:
+with tab_chat: 
     st.header("💬 AI Chat Assistant")
     st.info("Ask questions and get real-time guidance from the AI assistant")
     
     # Initialize chat history
-    if "chat_history" not in st.session_state:
-        st.session_state.chat_history = []
+    if "chat_history" not in st. session_state:
+        st. session_state.chat_history = []
     
     # Display chat history
-    for msg in st.session_state.chat_history:
-        role = msg.get("role", "user")
+    for msg in st.session_state.chat_history: 
+        role = msg. get("role", "user")
         content = msg.get("content", "")
         with st.chat_message(role):
             st.write(content)
@@ -701,14 +652,14 @@ with tab_chat:
     
     if user_message:
         # Add user message to history
-        st.session_state.chat_history.append({"role": "user", "content": user_message})
+        st.session_state. chat_history.append({"role": "user", "content": user_message})
         
         # Display user message
         with st.chat_message("user"):
             st.write(user_message)
         
         # Prepare data for JamAI
-        chat_data = {"chat": user_message}
+        chat_data = {"chat":  user_message}
         
         # Get AI response
         with st.spinner("Thinking..."):
@@ -739,7 +690,7 @@ with tab_chat:
                     with st.expander("🔍 Debug Data"):
                         st.write(response)
                 else:
-                    error_msg = "JamAI client not available. Please configure credentials."
+                    error_msg = "JamAI client not available.  Please configure credentials."
                     st.session_state.chat_history.append({
                         "role": "assistant",
                         "content": error_msg
@@ -747,7 +698,7 @@ with tab_chat:
                     with st.chat_message("assistant"):
                         st.error(error_msg)
             except Exception as e:
-                error_msg = f"Error: {e}"
+                error_msg = f"Error:  {e}"
                 st.session_state.chat_history.append({
                     "role": "assistant",
                     "content": error_msg
@@ -758,5 +709,5 @@ with tab_chat:
 # =============================================================================
 # FOOTER
 # =============================================================================
-st.divider()
-st.caption("🚨 AERN - AI Emergency Response Navigator ")
+st. divider()
+st.caption("🚨 AERN - AI Emergency Response Navigator | Powered by Insomniac")
