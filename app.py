@@ -826,7 +826,7 @@ with tab_multi:
         
         multi_audio = st.file_uploader(
             "Audio Input (Optional):",
-            type=["mp3", "wav", "m4a"],
+            type=["mp3", "wav"],
             help="Upload a voice recording describing the scene.",
             key="multi_audio"
         )
