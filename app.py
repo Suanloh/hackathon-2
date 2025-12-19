@@ -1,9 +1,35 @@
+
+import random
 import streamlit as st
 import tempfile
 import os
 import time
 from jamaibase import JamAI
 from jamaibase.protocol import MultiRowAddRequest
+import streamlit. components.v1 as components
+import math
+
+# =============================================================================
+# 1. 设置避难所数据 (给 Sidebar 用)
+# =============================================================================
+SHELTERS = [
+    {"name": "Dewan Utama USM", "lat": 5.3565, "lon": 100.2985, "type": "Main Hall"},
+    {"name": "Dewan Tuanku Syed Putra", "lat": 5.3545, "lon": 100.3005, "type": "Hall"},
+    {"name": "Kompleks Sukan USM", "lat": 5.3580, "lon": 100.2995, "type": "Sports Complex"},
+    {"name": "Hospital USM", "lat": 5.3598, "lon": 100.2993, "type": "Hospital"},
+    {"name": "Masjid USM", "lat": 5.3552, "lon": 100.3020, "type": "Mosque"}
+]
+
+def calculate_distance_py(lat1, lon1, lat2, lon2):
+    """Python 后台计算距离，专门给 Sidebar 列表用"""
+    R = 6371000 # 地球半径 (米)
+    phi1 = lat1 * math.pi / 180
+    phi2 = lat2 * math.pi / 180
+    dphi = (lat2 - lat1) * math.pi / 180
+    dlambda = (lon2 - lon1) * math.pi / 180
+    a = math.sin(dphi/2)**2 + math.cos(phi1)*math.cos(phi2) * math.sin(dlambda/2)**2
+    c = 2 * math.atan2(math.sqrt(a), math.sqrt(1-a))
+    return int(R * c)
 
 # =============================================================================
 # PAGE CONFIGURATION
@@ -14,39 +40,28 @@ st.set_page_config(
     layout="wide"
 )
 
-# =============================================================================
-# UI DESIGN & CSS (FORCE VERSION)
-# =============================================================================
+# Custom CSS for emergency response theme
 st.markdown("""
 <style>
-    /* 1. 强制修改全局背景颜色 */
-    .stApp {
-        background-color: #faf5f5 !important; /* 加了 !important 强制变红 */
-    }
-    
-    /* 2. 标题颜色 */
-    h1, h2, h3 {
-        color: #d32f2f !important;
-    }
-
-    /* 3. 按钮样式 (普通按钮) */
     .stButton>button {
-        background-color: white !important;
-        color: #333 !important;
-        border: 2px solid #ffcccc !important;
-        height: 80px;
-        font-size: 20px !important;
-        font-weight: bold !important;
-        border-radius: 12px !important;
+        height: 3em;
+        width: 100%;
+        border-radius: 10px;
+        font-weight: bold;
+        font-size: 20px;
     }
-    
-    /* 4. 针对 type="primary" 的红色按钮进行特训 */
-    /* 当你写 st.button(..., type="primary") 时会用到这个 */
-    div[data-testid="stButton"] > button[kind="primary"] {
-        background-color: #ff4444 !important;
-        color: white !important;
-        border: none !important;
-        box-shadow: 0 4px 6px rgba(0,0,0,0.2);
+    .stChatMessage {
+        border-radius: 15px;
+        padding: 10px;
+    }
+    .emergency-button {
+        background-color: #ff4444;
+        color: white;
+        padding: 20px;
+        border-radius: 15px;
+        font-size: 24px;
+        font-weight:  bold;
+        margin:  10px;
     }
 </style>
 """, unsafe_allow_html=True)
@@ -55,7 +70,7 @@ st.markdown("""
 # SECRETS AND CREDENTIALS LOADING
 # =============================================================================
 def load_secrets():
-    """Load secrets from .streamlit/secrets.toml or environment variables"""
+    """Load secrets from . streamlit/secrets.toml or environment variables"""
     # Try Streamlit secrets first
     api_key = None
     project_id = None
@@ -69,7 +84,7 @@ def load_secrets():
     if hasattr(st, "secrets") and st.secrets:
         api_key = st.secrets.get("JAMAI_API_KEY") or st.secrets.get("JAMAI_PAT_KEY")
         project_id = st.secrets.get("PROJECT_ID") or st.secrets.get("JAMAI_PROJECT_ID")
-        table_text_id = st.secrets.get("TABLE_TEXT_ID")
+        table_text_id = st. secrets.get("TABLE_TEXT_ID")
         table_audio_id = st.secrets.get("TABLE_AUDIO_ID")
         table_photo_id = st.secrets.get("TABLE_PHOTO_ID")
         table_multi_id = st.secrets.get("TABLE_MULTI_ID")
@@ -86,16 +101,16 @@ def load_secrets():
     table_audio_id = table_audio_id or os.getenv("TABLE_AUDIO_ID") or "audio_receive"
     table_photo_id = table_photo_id or os.getenv("TABLE_PHOTO_ID") or "picture_receipt"
     table_multi_id = table_multi_id or os.getenv("TABLE_MULTI_ID") or "combined"
-    table_chat_id = table_chat_id or os.getenv("TABLE_CHAT_ID") or "chat"
+    table_chat_id = table_chat_id or os. getenv("TABLE_CHAT_ID") or "chat"
     
     return {
-        "api_key": api_key.strip() if api_key else None,
+        "api_key": api_key. strip() if api_key else None,
         "project_id": project_id.strip() if project_id else None,
         "tables": {
             "text": table_text_id,
             "audio": table_audio_id,
             "photo": table_photo_id,
-            "multi": table_multi_id,
+            "multi":  table_multi_id,
             "chat": table_chat_id
         }
     }
@@ -112,12 +127,11 @@ jamai_client = None
 if API_KEY and PROJECT_ID:
     try:
         jamai_client = JamAI(token=API_KEY, project_id=PROJECT_ID)
-        st.sidebar.success("✅ Connected to JamAI")
     except Exception as e:
         st.sidebar.error(f"❌ JamAI Connection Failed: {e}")
         jamai_client = None
 else:
-    st.sidebar.warning("⚠️ JamAI credentials not configured")
+    st.sidebar. warning("⚠️ JamAI credentials not configured")
 
 # =============================================================================
 # HELPER FUNCTIONS
@@ -127,7 +141,7 @@ def save_uploaded_file(uploaded_file):
     """Save uploaded file to temporary location"""
     try:
         suffix = f".{uploaded_file.name.split('.')[-1]}" if "." in uploaded_file.name else ""
-        with tempfile.NamedTemporaryFile(delete=False, suffix=suffix) as tmp_file:
+        with tempfile. NamedTemporaryFile(delete=False, suffix=suffix) as tmp_file:
             tmp_file.write(uploaded_file.getvalue())
             return tmp_file.name
     except Exception as e:
@@ -136,10 +150,10 @@ def save_uploaded_file(uploaded_file):
 
 def cleanup_temp_file(file_path):
     """Clean up temporary file"""
-    try:
+    try: 
         if file_path and os.path.exists(file_path):
             os.remove(file_path)
-    except Exception:
+    except Exception: 
         pass
 
 def extract_uri_from_response(response):
@@ -174,34 +188,105 @@ def parse_response_data(response):
             return response["values"]
         if "data" in response and isinstance(response["data"], dict):
             return response["data"]
+        if "columns" in response and isinstance(response["columns"], dict):
+            return response["columns"]
         return response
     
     # Handle object responses
-    if hasattr(response, "row"):
-        return parse_response_data(getattr(response, "row"))
     if hasattr(response, "rows"):
         rows = getattr(response, "rows")
         if isinstance(rows, list) and rows:
-            return parse_response_data(rows[0])
+            first_row = rows[0]
+            # Extract columns from the row
+            if hasattr(first_row, "columns"):
+                return parse_columns_data(first_row.columns)
+            return parse_response_data(first_row)
+    
+    if hasattr(response, "columns"):
+        return parse_columns_data(response. columns)
+    
     if hasattr(response, "__dict__"):
         return parse_response_data(getattr(response, "__dict__", {}))
     
     return {}
 
+def parse_columns_data(columns):
+    """Extract text content from columns data structure"""
+    result = {}
+    
+    if isinstance(columns, dict):
+        for col_name, col_value in columns.items():
+            # Extract text from column value
+            if isinstance(col_value, dict):
+                result[col_name] = col_value.get("text") or col_value.get("value") or str(col_value)
+            elif hasattr(col_value, "text"):
+                result[col_name] = col_value.text
+            elif hasattr(col_value, "value"):
+                result[col_name] = col_value.value
+            else:
+                result[col_name] = str(col_value)
+    
+    return result
+
+def extract_chat_completion_content(value):
+    """Extract content from ChatCompletion object or dict"""
+    # If value is a ChatCompletion object, extract the content
+    if hasattr(value, "choices") and value.choices:
+        try:
+            return value.choices[0].message.content
+        except (AttributeError, IndexError):
+            pass
+    
+    # If value is a dict with ChatCompletion structure
+    if isinstance(value, dict) and "choices" in value: 
+        try:
+            choices = value["choices"]
+            if isinstance(choices, list) and choices:
+                first_choice = choices[0]
+                if isinstance(first_choice, dict) and "message" in first_choice:
+                    return first_choice["message"]. get("content")
+                elif hasattr(first_choice, "message"):
+                    return first_choice. message.content
+        except (AttributeError, IndexError, KeyError):
+            pass
+    
+    # If it's already a string, return it
+    if isinstance(value, str):
+        return value if value else None
+    
+    # Convert to string if needed
+    return str(value) if value is not None else None
+
 def get_field_value(data, field_name, default=None):
-    """Safely extract field value from response data"""
+    """Safely extract field value from response data with comprehensive search"""
     if not isinstance(data, dict):
         return default
     
     # Direct lookup
     if field_name in data:
         value = data[field_name]
-        return value if value is not None else default
+        extracted = extract_chat_completion_content(value)
+        return extracted if extracted else default
+    
+    # Try alternative field names (case-insensitive and with variations)
+    alternative_names = [
+        field_name.lower(),
+        field_name.upper(),
+        field_name.replace("_", " "),
+        field_name.replace(" ", "_"),
+    ]
+    
+    for key, value in data.items():
+        if key.lower() in [name.lower() for name in alternative_names]:
+            extracted = extract_chat_completion_content(value)
+            return extracted if extracted else default
     
     # Recursive search for nested structures
-    for value in data.values():
-        if isinstance(value, dict) and field_name in value:
-            return value[field_name]
+    for key, value in data.items():
+        if isinstance(value, dict):
+            result = get_field_value(value, field_name, None)
+            if result is not None:
+                return result
     
     return default
 
@@ -223,7 +308,7 @@ def add_table_row(table_id, row_data):
             request=request
         )
         return response
-    except Exception as e:
+    except Exception as e: 
         raise RuntimeError(f"Failed to add table row: {e}")
 
 def list_action_tables():
@@ -231,10 +316,10 @@ def list_action_tables():
     if jamai_client is None:
         return []
     
-    try:
-        response = jamai_client.table.list_tables(table_type="action")
+    try: 
+        response = jamai_client. table.list_tables(table_type="action")
         if hasattr(response, "items"):
-            return [table.id for table in response.items]
+            return [table. id for table in response.items]
         return []
     except Exception as e:
         st.error(f"Error listing tables: {e}")
@@ -245,13 +330,66 @@ def get_table_schema(table_id):
     if jamai_client is None:
         return None
     
-    try:
-        response = jamai_client.table.get_table(table_type="action", table_id=table_id)
+    try: 
+        response = jamai_client. table.get_table(table_type="action", table_id=table_id)
         return response
     except Exception as e:
         st.error(f"Error getting table schema: {e}")
         return None
 
+# =============================================================================
+# 2. 定义地图组件 (只给 Tab 1 用)
+# =============================================================================
+def get_live_location():
+    """
+    纯展示用的地图：自动画出从 School of CS 到 Dewan Utama 的弯曲路线
+    """
+    html = """
+    <!DOCTYPE html>
+    <html>
+    <head>
+        <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
+        <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+        <style>body { margin: 0; padding: 0; } #map { height: 450px; width: 100%; border-radius: 12px; }</style>
+    </head>
+    <body>
+        <div id="map"></div>
+        <script>
+        const START = [5.3540, 100.3015]; 
+        const END = [5.3565, 100.2985];   
+        const ROUTE_PATH = [
+            [5.3540, 100.3015], [5.3542, 100.3012], [5.3548, 100.3008], 
+            [5.3555, 100.3000], [5.3560, 100.2992], [5.3565, 100.2985]
+        ];
+        window.onload = function() {
+            var map = L.map('map', {zoomControl: false, attributionControl: false}).setView([5.3552, 100.3000], 16);
+            L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png').addTo(map);
+            L.marker(START, {icon: L.icon({iconUrl: 'https://raw.githubusercontent.com/pointhi/leaflet-color-markers/master/img/marker-icon-2x-red.png', iconSize: [25, 41], iconAnchor: [12, 41], popupAnchor: [1, -34]})}).addTo(map).bindPopup("<b>📍 You are here</b>").openPopup();
+            L.marker(END, {icon: L.icon({iconUrl: 'https://raw.githubusercontent.com/pointhi/leaflet-color-markers/master/img/marker-icon-2x-green.png', iconSize: [25, 41], iconAnchor: [12, 41], popupAnchor: [1, -34]})}).addTo(map).bindPopup("<b>🏃 SAFE ZONE: Dewan Utama</b>");
+            var routeLine = L.polyline(ROUTE_PATH, {color: '#2962FF', weight: 6, opacity: 0.8, dashArray: '12, 12', lineCap: 'round', lineJoin: 'round'}).addTo(map);
+            map.fitBounds(routeLine.getBounds(), {padding: [50, 50]});
+        }
+        </script>
+    </body>
+    </html>
+    """
+    components.html(html, height=450)
+
+    components.html(html, height=450)
+    
+    # Return the component and capture the value
+    component_value = components.html(html, height=650)
+    
+    # Store in session state if data is received
+    if component_value:
+        if isinstance(component_value, dict):
+            st.session_state.emergency_location = {
+                'lat': component_value. get('lat'),
+                'lon': component_value.get('lon'),
+                'shelter': component_value.get('shelter')
+            }
+    
+    return component_value
 # =============================================================================
 # PAGE HEADER
 # =============================================================================
@@ -259,384 +397,180 @@ st.title("🚨 AERN - AI Emergency Response Navigator")
 st.markdown("""
 **AI-Powered Emergency Response System** — AERN uses advanced AI to analyze emergency situations 
 in real-time through text, audio, and images. Get instant situational assessments, 
-recommended actions, and connect with emergency services faster.
+recommended actions, and connect with emergency services faster. 
 """)
 
 st.divider()
 
 # =============================================================================
-# SIDEBAR - DEBUG AND CONFIGURATION
+# 3. SIDEBAR (保持列表样式)
 # =============================================================================
 with st.sidebar:
-    current_path = os.path.dirname(os.path.abspath(__file__))
-    image_path = os.path.join(current_path, "images", "usm_flood_map.jpg") 
+    st.subheader("📍 Live Status")
     
-    if os.path.exists(image_path):
-        st.image(image_path, caption="📍 Current Location: USM", use_container_width=True)
+    # 获取坐标状态
+    loc = st.session_state.get('emergency_location')
+    
+    if loc and loc.get('lat'):
+        # 🟢 如果有坐标 (Tab 1 按钮点击后)，显示列表
+        user_lat = loc['lat']
+        user_lon = loc['lon']
+        
+        st.success(f"🟢 GPS Connected")
+        st.caption(f"Lat: {user_lat:.4f}, Lon: {user_lon:.4f}")
+        
+        st.divider()
+        st.subheader("🏢 Nearby Safe Zones")
+        
+        # 这里的代码负责算出所有避难所的距离，并排序
+        shelter_list_with_dist = []
+        for s in SHELTERS:
+            dist = calculate_distance_py(user_lat, user_lon, s['lat'], s['lon'])
+            shelter_list_with_dist.append({**s, "dist": dist})
+        
+        # 按距离排序
+        shelter_list_with_dist.sort(key=lambda x: x['dist'])
+        
+        # 显示列表
+        for s in shelter_list_with_dist:
+            if s == shelter_list_with_dist[0]:
+                st.markdown(f"**🌟 {s['name']} (NEAREST)**")
+                st.progress(100, text="Recommended")
+            else:
+                st.markdown(f"**{s['name']}**")
+            
+            st.caption(f"📏 {s['dist']}m away • Type: {s['type']}")
+            st.markdown("---")
+            
     else:
-        # 如果还是找不到，用备用网络地图
-        st.error("Local image not found, using alternative map.")
-        st.image("https://maps.googleapis.com/maps/api/staticmap?center=USM+Penang&zoom=15&size=600x400&maptype=roadmap&markers=color:red%7Clabel:S%7CUSM", use_container_width=True)
-    # -------------------
-
-    st.success("🟢 System Online: Connected to HQ")
-    st.divider()
-    # -------------------------------------
-    st.header("⚙️ System Configuration")
-    
-    # Credentials status
-    with st.expander("🔑 Credentials Status", expanded=False):
-        st.write(f"**API Key:** {'✅ Loaded' if API_KEY else '❌ Missing'}")
-        st.write(f"**Project ID:** {PROJECT_ID if PROJECT_ID else '❌ Missing'}")
-    
-    # Table IDs
-    with st.expander("📋 Table Configuration", expanded=False):
-        st.write("**Configured Table IDs:**")
-        for key, value in TABLE_IDS.items():
-            st.code(f"{key}: {value}")
-    
-    # List available tables
-    if st.button("🔍 List Available Action Tables"):
-        with st.spinner("Fetching tables..."):
-            tables = list_action_tables()
-            if tables:
-                st.success(f"Found {len(tables)} tables:")
-                for table in tables:
-                    st.write(f"• {table}")
-            else:
-                st.info("No tables found or unable to connect")
-    
-    # Schema Inspector
-    st.markdown("### 🔬 Schema Inspector")
-    inspect_table = st.selectbox(
-        "Select table to inspect:",
-        options=list(TABLE_IDS.keys()),
-        format_func=lambda x: f"{x.upper()} ({TABLE_IDS[x]})"
-    )
-    
-    if st.button("Inspect Schema"):
-        table_id = TABLE_IDS[inspect_table]
-        with st.spinner(f"Inspecting {table_id}..."):
-            schema = get_table_schema(table_id)
-            if schema:
-                st.success("Schema retrieved!")
-                
-                # Display input columns
-                if hasattr(schema, "cols") and schema.cols:
-                    st.write("**Input Columns:**")
-                    for col in schema.cols:
-                        st.write(f"• {col.id} ({col.dtype})")
-                
-                # Display output columns
-                if hasattr(schema, "chat_cols") and schema.chat_cols:
-                    st.write("**Output Columns:**")
-                    for col in schema.chat_cols:
-                        st.write(f"• {col.id} ({col.dtype})")
-                
-                with st.expander("Raw Schema Data"):
-                    st.write(schema)
-            else:
-                st.error("Failed to retrieve schema")
-
+        # 🔴 如果没有坐标，显示等待状态 (Demo 开始前的状态)
+        st.info("📡 Waiting for Alert Signal...")
+        st.caption("Click 'CONFIRM' in Emergency Tab to activate tracking.")
+        
+        st.divider()
+        st.subheader("🏢 USM Shelters Database")
+        for s in SHELTERS:
+             st.text(f"• {s['name']}")
 # =============================================================================
 # MAIN TABS
 # =============================================================================
-tab_emergency, tab_single, tab_multi, tab_chat = st.tabs([
+tab_emergency, tab_multi, tab_chat = st.tabs([
     "🔥 Emergency Response",
-    "📝 Single Modality Analysis",
-    "🔀 Multi-Modality Fusion",
-    "💬 AI Chat Assistant"
+    "🔀 Quick Guidance",
+    "💬 CareLink"
 ])
 
 # =============================================================================
-# TAB 1: EMERGENCY RESPONSE
+# 4. TAB 1: EMERGENCY RESPONSE (触发器)
 # =============================================================================
 with tab_emergency:
     st.header("⚡ Quick Emergency Response")
     st.info("Select your emergency type for rapid assessment and guidance")
     
-    # Emergency type buttons
+    if "selected_emergency" not in st.session_state:
+        st.session_state.selected_emergency = None
+
+    # 按钮区域
     col1, col2, col3 = st.columns(3)
-    
-    emergency_selected = None
-    
     with col1:
-        if st.button("🌊 Flood", use_container_width=True):
-            emergency_selected = "Flood"
-        if st.button("🏥 Medical Emergency", use_container_width=True):
-            emergency_selected = "Medical Emergency"
-    
+        if st.button("🌊 Flood", use_container_width=True): st.session_state.selected_emergency = "Flood"
+        if st.button("🏥 Medical", use_container_width=True): st.session_state.selected_emergency = "Medical Emergency"
     with col2:
-        if st.button("🔥 Fire", use_container_width=True):
-            emergency_selected = "Fire"
-        if st.button("🌪️ Natural Disaster", use_container_width=True):
-            emergency_selected = "Natural Disaster"
-    
+        if st.button("🔥 Fire", use_container_width=True): st.session_state.selected_emergency = "Fire"
+        if st.button("🌪️ Natural Disaster", use_container_width=True): st.session_state.selected_emergency = "Natural Disaster"
     with col3:
-        if st.button("🚗 Accident", use_container_width=True):
-            emergency_selected = "Accident"
-        if st.button("🏢 Building Emergency", use_container_width=True):
-            emergency_selected = "Building Emergency"
+        if st.button("🚗 Accident", use_container_width=True): st.session_state.selected_emergency = "Accident"
+        if st.button("🏢 Building", use_container_width=True): st.session_state.selected_emergency = "Building Emergency"
     
+    emergency_selected = st.session_state.selected_emergency
+
     if emergency_selected:
-        st.markdown(f"### Selected: **{emergency_selected}**")
+        st.divider()
+        st.markdown(f"### 🚨 Reporting: **{emergency_selected}**")
         
-        # Emergency input form
+        if st.button("🔄 Change Type"):
+            st.session_state.selected_emergency = None
+            st.rerun()
+
+        st.warning(f"⚠️ Activating Protocol for **{emergency_selected}**...")
+
         with st.form(key="emergency_form"):
-            st.write("Provide additional details:")
-            
-            # Text input
-            emergency_text = st.text_area(
-                "Describe the situation:",
-                placeholder=f"Example: {emergency_selected} emergency at my location..."
-            )
-            
-            # Optional file uploads
-            col_a, col_b = st.columns(2)
-            with col_a:
-                emergency_audio = st.file_uploader(
-                    "Optional: Audio recording",
-                    type=["mp3", "wav", "m4a"],
-                    key="emerg_audio"
-                )
-            with col_b:
-                emergency_photo = st.file_uploader(
-                    "Optional: Scene photo",
-                    type=["jpg", "png", "jpeg"],
-                    key="emerg_photo"
-                )
-                if emergency_photo:
-                    st.image(emergency_photo, width=200)
-            
-            submit_emergency = st.form_submit_button("🚨 SUBMIT EMERGENCY REPORT", use_container_width=True)
+            st.write(f"**Alert Message:** CRITICAL ALERT: {emergency_selected} at USM. GPS Tracking Activated.")
+            submit_emergency = st.form_submit_button("🚨 CONFIRM & REQUEST HELP", use_container_width=True)
         
-        if submit_emergency:
-            # Determine which table to use based on inputs
-            if emergency_audio or emergency_photo:
-                # Use multi-modal table
-                table_id = TABLE_IDS["multi"]
-                st.info(f"Using multi-modal table: {table_id}")
-                
-                emergency_data = {}
-                
-                # Add text
-                if emergency_text:
-                    emergency_data["text"] = f"[{emergency_selected}] {emergency_text}"
-                
-                # Upload audio
-                if emergency_audio:
-                    temp_audio = save_uploaded_file(emergency_audio)
-                    if temp_audio and jamai_client:
-                        try:
-                            upload_resp = jamai_client.file.upload_file(temp_audio)
-                            uri = extract_uri_from_response(upload_resp)
-                            if uri:
-                                emergency_data["audio text"] = uri
-                        except Exception as e:
-                            st.error(f"Audio upload failed: {e}")
-                        finally:
-                            cleanup_temp_file(temp_audio)
-                
-                # Upload photo
-                if emergency_photo:
-                    temp_photo = save_uploaded_file(emergency_photo)
-                    if temp_photo and jamai_client:
-                        try:
-                            upload_resp = jamai_client.file.upload_file(temp_photo)
-                            uri = extract_uri_from_response(upload_resp)
-                            if uri:
-                                emergency_data["image"] = uri
-                        except Exception as e:
-                            st.error(f"Photo upload failed: {e}")
-                        finally:
-                            cleanup_temp_file(temp_photo)
-                
-            else:
-                # Use text-only table
-                table_id = TABLE_IDS["text"]
-                st.info(f"Using text table: {table_id}")
-                # Note: text_received table uses 'text_receive' column, different from combined table's 'text' column
-                emergency_data = {"text_receive": f"[{emergency_selected}] {emergency_text}"}
+        # 🟢 点击 Confirm 后的逻辑
+        if submit_emergency or st.session_state.get("form_submitted"):
+            st.session_state.form_submitted = True 
             
-            # Submit to JamAI
-            if emergency_data:
-                with st.spinner("🚨 Processing emergency report..."):
-                    try:
-                        if jamai_client:
-                            response = add_table_row(table_id, emergency_data)
-                            data = parse_response_data(response)
-                            
-                            # Display results
-                            st.success("✅ Emergency Report Processed")
-                            
-                            description = get_field_value(data, "description", "No description available")
-                            summary = get_field_value(data, "summary", "No summary available")
-                            
-                            st.subheader("📋 Situation Assessment")
-                            st.write(description)
-                            
-                            st.divider()
-                            
-                            st.subheader("📢 Recommended Actions")
-                            st.info(summary)
-                            
-                            with st.expander("🔍 Debug Data"):
-                                st.write(response)
-                        else:
-                            st.error("JamAI client not available")
-                    except Exception as e:
-                        st.error(f"Error processing emergency: {e}")
-            else:
-                st.warning("Please provide emergency details")
+            # 🔥 关键：在这里“激活”Sidebar
+            # 我们写入假坐标，Sidebar 就会读取这个坐标并生成列表，而不是地图！
+            st.session_state.emergency_location = {
+                'lat': 5.3540, 
+                'lon': 100.3015,
+                'shelter': {'name': 'Dewan Utama'} 
+            }
+            
+            st.success("✅ ALERT SENT! Rescue team dispatched.")
+            st.toast(f"🚨 {emergency_selected} Alert Broadcasted!", icon="📡")
+            
+            advice_dict = {
+                "Flood": "🌊 Move to HIGHER GROUND immediately.",
+                "Fire": "🔥 Evacuate via STAIRS.",
+                "Medical Emergency": "🏥 Clear space for ambulance.",
+                "Accident": "🚗 Do not move injured persons.",
+                "Natural Disaster": "🌪️ Find cover immediately.",
+                "Building Emergency": "🏢 Exit away from glass."
+            }
+            st.error(f"📢 **ACTION:** {advice_dict.get(emergency_selected, 'Evacuate now.')}")
 
-# =============================================================================
-# TAB 2: SINGLE MODALITY ANALYSIS
-# =============================================================================
-with tab_single:
-    st.header("📝 Single Input Analysis")
-    st.info("Analyze a single type of input (text, audio, or photo)")
-    
-    input_type = st.radio(
-        "Select input type:",
-        ["Text", "Audio", "Photo"],
-        horizontal=True
-    )
-    
-    with st.form(key="single_modality_form"):
-        single_data = {}
-        
-        if input_type == "Text":
-            text_input = st.text_area(
-                "Describe the emergency:",
-                height=150,
-                placeholder="Enter detailed description..."
-            )
-        elif input_type == "Audio":
-            audio_file = st.file_uploader(
-                "Upload audio recording:",
-                type=["mp3", "wav", "m4a"],
-                key="single_audio"
-            )
-        else:  # Photo
-            photo_file = st.file_uploader(
-                "Upload scene photo:",
-                type=["jpg", "png", "jpeg"],
-                key="single_photo"
-            )
-        
-        analyze_single = st.form_submit_button("Analyze", use_container_width=True)
-    
-    if analyze_single:
-        ready_to_submit = False
-        
-        if input_type == "Text":
-            if text_input:
-                # Note: text_received table uses 'text_receive' column
-                single_data = {"text_receive": text_input}
-                table_id = TABLE_IDS["text"]
-                ready_to_submit = True
-            else:
-                st.warning("Please enter text description")
-        
-        elif input_type == "Audio":
-            if audio_file:
-                temp_audio = save_uploaded_file(audio_file)
-                if temp_audio and jamai_client:
-                    with st.spinner("Uploading audio..."):
-                        try:
-                            upload_resp = jamai_client.file.upload_file(temp_audio)
-                            uri = extract_uri_from_response(upload_resp)
-                            if uri:
-                                single_data = {"audio": uri}
-                                table_id = TABLE_IDS["audio"]
-                                ready_to_submit = True
-                            else:
-                                st.error("Audio upload failed: No URI returned")
-                        except Exception as e:
-                            st.error(f"Audio upload error: {e}")
-                        finally:
-                            cleanup_temp_file(temp_audio)
-            else:
-                st.warning("Please upload an audio file")
-        
-        else:  # Photo
-            if photo_file:
-                st.image(photo_file, caption="Uploaded Photo", width=300)
-                temp_photo = save_uploaded_file(photo_file)
-                if temp_photo and jamai_client:
-                    with st.spinner("Uploading photo..."):
-                        try:
-                            upload_resp = jamai_client.file.upload_file(temp_photo)
-                            uri = extract_uri_from_response(upload_resp)
-                            if uri:
-                                single_data = {"picture": uri}
-                                table_id = TABLE_IDS["photo"]
-                                ready_to_submit = True
-                            else:
-                                st.error("Photo upload failed: No URI returned")
-                        except Exception as e:
-                            st.error(f"Photo upload error: {e}")
-                        finally:
-                            cleanup_temp_file(temp_photo)
-            else:
-                st.warning("Please upload a photo")
-        
-        # Submit to JamAI
-        if ready_to_submit:
-            with st.spinner(f"Analyzing with table: {table_id}"):
-                try:
-                    if jamai_client:
-                        response = add_table_row(table_id, single_data)
-                        data = parse_response_data(response)
-                        
-                        # Display results
-                        st.success("✅ Analysis Complete")
-                        
-                        description = get_field_value(data, "description", "No description available")
-                        summary = get_field_value(data, "summary", "No summary available")
-                        
-                        st.subheader("📋 Description")
-                        st.write(description)
-                        
-                        st.divider()
-                        
-                        st.subheader("📢 Summary")
-                        st.info(summary)
-                        
-                        with st.expander("🔍 Debug Data"):
-                            st.write(response)
-                    else:
-                        st.error("JamAI client not available")
-                except Exception as e:
-                    st.error(f"Analysis error: {e}")
+            # 仪表盘
+            st.subheader(f"🗺️ Live Evacuation Route")
+            m1, m2, m3 = st.columns(3)
+            with m1: st.metric("Hazard Level", "CRITICAL ⚠️", "Zone Active")
+            with m2: st.metric("Nearest Shelter", "Dewan Utama", "500m away")
+            with m3: st.metric("Est. Evac Time", "8 mins", "Fastest Route")
 
+            # 🟢 在这里显示 Tab 1 的地图
+            get_live_location()
+            
+            # 后台上传
+            if jamai_client and "upload_done" not in st.session_state:
+                 try:
+                     final_text = f"[{emergency_selected}] User at USM. Status: Critical."
+                     add_table_row(TABLE_IDS["text"], {"text": final_text})
+                     st.session_state.upload_done = True
+                 except: pass
 # =============================================================================
-# TAB 3: MULTI-MODALITY FUSION
+# TAB 2: MULTI-MODALITY FUSION
 # =============================================================================
-with tab_multi:
-    st.header("🔀 Multi-Modality Fusion")
-    st.info(f"Combine multiple inputs for comprehensive analysis (Table: {TABLE_IDS['multi']})")
+with tab_multi: 
+    st.header("What's Happening? 🔀 ")
+    st.info(f"You can provide multiple inputs (text, audio, photo) for situation analysis.")
     
-    col1, col2 = st.columns(2)
+    col1, col2 = st. columns(2)
     
     with col1:
-        multi_text = st.text_area("Text Description:", height=150)
+        multi_text = st.text_area("**Describe** the situation (Text)", height=150,
+                                  placeholder="Example: I see black smoke coming from the Computer Science building, and the fire alarm is ringing..."
+        )
+        
         multi_audio = st.file_uploader(
-            "Audio Input:",
+            "Audio Input (Optional):",
             type=["mp3", "wav", "m4a"],
+            help="Upload a voice recording describing the scene.",
             key="multi_audio"
         )
     
     with col2:
         multi_photo = st.file_uploader(
-            "Photo Input:",
+            "Upload evidence (Optional):",
             type=["jpg", "png", "jpeg"],
             key="multi_photo"
         )
-        if multi_photo:
+        if multi_photo: 
             st.image(multi_photo, caption="Preview", width=200)
     
-    if st.button("🔀 Analyze Combined Data", use_container_width=True):
+    if st.button("Click here to get an immediate escape plan.", use_container_width=True):
         if not (multi_text or multi_audio or multi_photo):
             st.error("Please provide at least one input")
         else:
@@ -647,7 +581,7 @@ with tab_multi:
                 multi_data["text"] = multi_text
             
             # Upload audio
-            if multi_audio:
+            if multi_audio: 
                 temp_audio = save_uploaded_file(multi_audio)
                 if temp_audio and jamai_client:
                     try:
@@ -655,58 +589,79 @@ with tab_multi:
                         uri = extract_uri_from_response(upload_resp)
                         if uri:
                             multi_data["audio text"] = uri
-                    except Exception as e:
+                    except Exception as e: 
                         st.error(f"Audio upload failed: {e}")
-                    finally:
+                    finally: 
                         cleanup_temp_file(temp_audio)
             
             # Upload photo
-            if multi_photo:
+            if multi_photo: 
                 temp_photo = save_uploaded_file(multi_photo)
                 if temp_photo and jamai_client:
                     try:
                         upload_resp = jamai_client.file.upload_file(temp_photo)
                         uri = extract_uri_from_response(upload_resp)
-                        if uri:
+                        if uri: 
                             multi_data["image"] = uri
                     except Exception as e:
-                        st.error(f"Photo upload failed: {e}")
-                    finally:
+                        st.error(f"Photo upload failed:  {e}")
+                    finally:  
                         cleanup_temp_file(temp_photo)
             
             # Submit to JamAI
-            if multi_data:
-                with st.spinner("Processing multi-modal data..."):
+            if multi_data: 
+                messages = [
+                    "Preparing your situation overview…",
+                    "Identifying risks and next steps…",
+                    "Checking details to keep you safe…",
+                    "Creating your safety plan…",
+                    "We’re reviewing your info to help right now…"
+                ]
+                with st.spinner(random.choice(messages)):
+                    time.sleep(2)
+
                     try:
-                        if jamai_client:
+                        if jamai_client: 
                             response = add_table_row(TABLE_IDS["multi"], multi_data)
                             data = parse_response_data(response)
                             
                             # Display results
-                            st.success("✅ Multi-Modal Analysis Complete")
-                            
-                            description = get_field_value(data, "description", "No description available")
-                            summary = get_field_value(data, "summary", "No summary available")
-                            
-                            st.subheader("📋 Integrated Description")
-                            st.write(description)
-                            
-                            st.divider()
-                            
-                            st.subheader("📢 Strategic Summary")
-                            st.info(summary)
-                            
-                            with st.expander("🔍 Debug Data"):
-                                st.write(response)
-                        else:
+                            st.success("✅ Analysis Complete")
+
+                            # Use correct field names from the API (same as Emergency tab)
+                            description = get_field_value(data, "input_summary", "No description available")
+                            summary = get_field_value(data, "diagonise", "No summary available")
+
+                            # # Create a more visual layout
+                            # st.markdown("### 🔍 Integrated Analysis")
+
+                            # Use columns for better layout
+                            col1, col2 = st.columns([2, 1])
+
+                            with col1:
+                                # SWAPPED ORDER: Show diagnosis FIRST
+                                st.markdown("#### 🚨 Safety Recommendations")
+                                st.warning(summary)
+                                
+                                # THEN show situation assessment
+                                st.markdown("#### 📋 Situation Overview")
+                                st.info(description)
+
+                            with col2:
+                                st.button("📞 Emergency Services", type="primary", use_container_width=True)
+                                st.button("📍 Share Location", use_container_width=True)
+
+                            with st.expander("🔧 Debug Information"):
+                                st.json(data)
+                        else: 
                             st.error("JamAI client not available")
                     except Exception as e:
                         st.error(f"Multi-modal analysis error: {e}")
-
+                        
 # =============================================================================
-# TAB 4: AI CHAT ASSISTANT
+# TAB 3: AI CHAT ASSISTANT
 # =============================================================================
-with tab_chat:
+with tab_chat:  
     st.header("💬 AI Chat Assistant")
     st.info("Ask questions and get real-time guidance from the AI assistant")
     
@@ -715,40 +670,35 @@ with tab_chat:
         st.session_state.chat_history = []
     
     # Display chat history
-    for msg in st.session_state.chat_history:
+    for msg in st.session_state.chat_history: 
         role = msg.get("role", "user")
         content = msg.get("content", "")
         with st.chat_message(role):
             st.write(content)
     
     # Chat input
-    user_message = st.chat_input("Type your message here...")
+    user_message = st.chat_input("Hello, how can I assist you today?")
     
     if user_message:
         # Add user message to history
-        st.session_state.chat_history.append({"role": "user", "content": user_message})
+        st.session_state.chat_history.append({"role": "user", "content":  user_message})
         
         # Display user message
         with st.chat_message("user"):
             st.write(user_message)
         
-        # Prepare data for JamAI
+        # Prepare data for JamAI (input column is "chat")
         chat_data = {"chat": user_message}
         
         # Get AI response
         with st.spinner("Thinking..."):
             try:
-                if jamai_client:
+                if jamai_client: 
                     response = add_table_row(TABLE_IDS["chat"], chat_data)
                     data = parse_response_data(response)
                     
-                    # Extract assistant reply
-                    assistant_reply = (
-                        get_field_value(data, "assistant_reply") or
-                        get_field_value(data, "summary") or
-                        get_field_value(data, "description") or
-                        "I'm sorry, I couldn't generate a response."
-                    )
+                    # Extract assistant reply from the "output" column
+                    assistant_reply = get_field_value(data, "output", "I'm sorry, I couldn't generate a response.")
                     
                     # Add to history
                     st.session_state.chat_history.append({
@@ -762,26 +712,58 @@ with tab_chat:
                     
                     # Debug info
                     with st.expander("🔍 Debug Data"):
-                        st.write(response)
-                else:
-                    error_msg = "JamAI client not available. Please configure credentials."
+                        st.json(data)
+                else: 
+                    error_msg = "JamAI client not available.  Please configure credentials."
                     st.session_state.chat_history.append({
                         "role": "assistant",
                         "content": error_msg
                     })
                     with st.chat_message("assistant"):
                         st.error(error_msg)
-            except Exception as e:
+            except Exception as e: 
                 error_msg = f"Error: {e}"
-                st.session_state.chat_history.append({
-                    "role": "assistant",
+                st. session_state.chat_history. append({
+                    "role":  "assistant",
                     "content": error_msg
                 })
                 with st.chat_message("assistant"):
                     st.error(error_msg)
-
 # =============================================================================
 # FOOTER
 # =============================================================================
 st.divider()
-st.caption("🚨 AERN - AI Emergency Response Navigator ")
+st.markdown("""
+    <style>
+        .footer-text {
+            text-align: center;
+            color: #888; /* 灰色，在黑白背景都看得清 */
+            font-size: 12px;
+            padding-bottom: 20px;
+        }
+        .disclaimer-box {
+            /* 关键修改：使用 rgba 透明度 */
+            /* 红色背景，但在黑色底色上只会显出淡淡的红光 */
+            background-color: rgba(255, 80, 80, 0.1); 
+            
+            /* 边框让它更有科技感 */
+            border: 1px solid rgba(255, 80, 80, 0.3);
+            
+            /* 文字颜色：使用亮红色/粉色，在深色背景下更容易阅读 */
+            color: #ff8a80;
+            
+            padding: 10px;
+            border-radius: 8px;
+            display: inline-block;
+            max-width: 600px;
+        }
+    </style>
+    
+    <div class="footer-text">
+        <p>🚨 <b>AERN - AI Emergency Response Navigator</b> | Powered by Insomniac</p>
+        <div class="disclaimer-box">
+            ⚠️ <b>DISCLAIMER:</b> This system is a prototype for demonstration only. <br>
+            AI responses may be inaccurate. In real life-threatening situations, <b>ALWAYS CALL 999</b>.
+        </div>
+    </div>
+""", unsafe_allow_html=True)
