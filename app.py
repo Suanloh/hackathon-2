@@ -20,6 +20,9 @@ SHELTERS = [
     {"name": "Masjid USM", "lat": 5.3552, "lon": 100.3020, "type": "Mosque"}
 ]
 
+st.set_page_config(
+    initial_sidebar_state="collapsed"  # This makes the sidebar closed by default
+)
 def calculate_distance_py(lat1, lon1, lat2, lon2):
     """Python 后台计算距离，专门给 Sidebar 列表用"""
     R = 6371000 # 地球半径 (米)
@@ -651,13 +654,13 @@ st.divider()
 # 3. SIDEBAR (保持列表样式)
 # =============================================================================
 with st.sidebar:
-    st.subheader("📍 Live Status")
+    st. subheader("📍 Live Status")
     
-    # 获取坐标状态
+    # Get coordinates status
     loc = st.session_state.get('emergency_location')
     
-    if loc and loc.get('lat'):
-        # 🟢 如果有坐标 (Tab 1 按钮点击后)，显示列表
+    if loc and loc. get('lat'):
+        # 🟢 If coordinates exist, show shelter list
         user_lat = loc['lat']
         user_lon = loc['lon']
         
@@ -667,16 +670,16 @@ with st.sidebar:
         st.divider()
         st.subheader("🏢 Nearby Safe Zones")
         
-        # 这里的代码负责算出所有避难所的距离，并排序
+        # Calculate distances to all shelters
         shelter_list_with_dist = []
         for s in SHELTERS:
             dist = calculate_distance_py(user_lat, user_lon, s['lat'], s['lon'])
             shelter_list_with_dist.append({**s, "dist": dist})
         
-        # 按距离排序
+        # Sort by distance
         shelter_list_with_dist.sort(key=lambda x: x['dist'])
         
-        # 显示列表
+        # Display list
         for s in shelter_list_with_dist:
             if s == shelter_list_with_dist[0]:
                 st.markdown(f"**🌟 {s['name']} (NEAREST)**")
@@ -688,14 +691,10 @@ with st.sidebar:
             st.markdown("---")
             
     else:
-        # 🔴 如果没有坐标，显示等待状态 (Demo 开始前的状态)
-        st.info("📡 Waiting for Alert Signal...")
-        st.caption("Click 'CONFIRM' in Emergency Tab to activate tracking.")
-        
-        st.divider()
+        # 🔴 No coordinates - just show shelter database
         st.subheader("🏢 USM Shelters Database")
         for s in SHELTERS:
-             st.text(f"• {s['name']}")
+            st.text(f"• {s['name']}")
 # =============================================================================
 # MAIN TABS
 # =============================================================================
