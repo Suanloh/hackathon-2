@@ -9,6 +9,9 @@ from jamaibase.protocol import MultiRowAddRequest
 import streamlit. components.v1 as components
 import math
 
+st.set_page_config(
+    initial_sidebar_state="collapsed"  # This makes the sidebar closed by default
+)
 # =============================================================================
 # 1. 设置避难所数据 (给 Sidebar 用)
 # =============================================================================
@@ -20,9 +23,7 @@ SHELTERS = [
     {"name": "Masjid USM", "lat": 5.3552, "lon": 100.3020, "type": "Mosque"}
 ]
 
-st.set_page_config(
-    initial_sidebar_state="collapsed"  # This makes the sidebar closed by default
-)
+
 def calculate_distance_py(lat1, lon1, lat2, lon2):
     """Python 后台计算距离，专门给 Sidebar 列表用"""
     R = 6371000 # 地球半径 (米)
