@@ -337,56 +337,52 @@ def get_table_schema(table_id):
         st.error(f"Error getting table schema: {e}")
         return None
 
+# =============================================================================
+# 2. 定义地图组件 (只给 Tab 1 用)
+# =============================================================================
 def get_live_location():
-    """Get user's live GPS and show map with REAL shelter locations"""
+    """Auto-get user's GPS and show route to nearest shelter"""
     html = """
-    <!DOCTYPE html>
+    <! DOCTYPE html>
     <html>
     <head>
         <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
         <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
         <style>
-            #map { height: 400px; width: 100%; border-radius: 10px; }
-            .btn { 
-                background:  #ff4444; 
-                color: white; 
-                padding: 12px 24px; 
-                border: none; 
+            #map { height: 500px; width:  100%; border-radius: 10px; margin:  10px 0; }
+            #status { 
+                padding: 15px; 
+                background:  #f8f9fa; 
                 border-radius: 8px; 
-                cursor: pointer; 
+                margin: 10px 0;
+                text-align: center;
                 font-size: 16px;
-                margin: 10px 5px;
+            }
+            .loading {
+                color: #007bff;
                 font-weight: bold;
             }
-            .btn:hover { background: #cc0000; }
-            .info { padding: 10px; background: #f0f0f0; border-radius: 5px; margin:  10px 0; }
-            .shelter-info { background: #28a745; color: white; padding: 5px; border-radius: 5px; margin-top: 10px; }
+            .success {
+                color: #28a745;
+                font-weight:  bold;
+            }
+            . error {
+                color: #dc3545;
+                font-weight: bold;
+            }
         </style>
     </head>
     <body>
-        <button class="btn" onclick="getLocation()">📍 Get My Location</button>
-        <button class="btn" onclick="shareLocation()" id="shareBtn" style="display:none; background:#28a745;">
-            📤 Share Location to Emergency
-        </button>
-        <div id="info" class="info" style="display:none;"></div>
-        <div id="shelterInfo" class="shelter-info" style="display:none;"></div>
+        <div id="status" class="loading">📡 Getting your location...</div>
         <div id="map"></div>
         
         <script>
-        let map = null;
-        let marker = null;
-        let currentLat = null;
-        let currentLon = null;
-        let nearestShelterData = null;
-        
-        // REAL SHELTER LOCATIONS
         const shelters = [
             {name: "Dewan Utama USM", lat: 5.3565, lon: 100.2985, capacity: "500 people", type: "Main Hall"},
             {name: "Dewan Tuanku Syed Putra", lat: 5.3545, lon: 100.3005, capacity: "300 people", type: "Hall"},
             {name: "Kompleks Sukan USM", lat: 5.3580, lon: 100.2995, capacity: "400 people", type: "Sports Complex"},
             {name: "Hospital USM", lat: 5.3598, lon: 100.2993, capacity: "Emergency Center", type: "Hospital"},
-            {name: "Masjid USM", lat: 5.3552, lon: 100.3020, capacity: "200 people", type: "Mosque"},
-            {name: "Desasiswa Restu", lat: 5.3620, lon: 100.3010, capacity: "Higher Ground", type: "Dormitory"}
+            {name: "Masjid USM", lat: 5.3552, lon: 100.3020, capacity: "200 people", type: "Mosque"}
         ];
         
         function calculateDistance(lat1, lon1, lat2, lon2) {
@@ -395,97 +391,108 @@ def get_live_location():
             const φ2 = lat2 * Math. PI / 180;
             const Δφ = (lat2 - lat1) * Math.PI / 180;
             const Δλ = (lon2 - lon1) * Math.PI / 180;
-            
-            const a = Math.sin(Δφ/2) * Math.sin(Δφ/2) +
-                     Math.cos(φ1) * Math.cos(φ2) *
-                     Math.sin(Δλ/2) * Math.sin(Δλ/2);
-            const c = 2 * Math. atan2(Math.sqrt(a), Math.sqrt(1-a));
-            
+            const a = Math.sin(Δφ/2) * Math.sin(Δφ/2) + Math.cos(φ1) * Math.cos(φ2) * Math.sin(Δλ/2) * Math.sin(Δλ/2);
+            const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1-a));
             return R * c;
         }
         
-        function getLocation() {
-            if (navigator.geolocation) {
-                navigator.geolocation. getCurrentPosition(showPosition, showError);
-            } else {
-                alert("Geolocation not supported");
+        function createCurvedPath(start, end, numPoints = 20) {
+            const points = [];
+            for (let i = 0; i <= numPoints; i++) {
+                const t = i / numPoints;
+                const curve = Math.sin(t * Math.PI) * 0.002;
+                const lat = start[0] + (end[0] - start[0]) * t + curve;
+                const lon = start[1] + (end[1] - start[1]) * t - curve;
+                points.push([lat, lon]);
             }
+            return points;
         }
         
         function showPosition(position) {
-            currentLat = position.coords.latitude;
-            currentLon = position.coords.longitude;
+            const currentLat = position.coords.latitude;
+            const currentLon = position.coords.longitude;
             const accuracy = position.coords.accuracy;
             
-            if (map === null) {
-                map = L.map('map').setView([currentLat, currentLon], 15);
-                L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
-                    attribution: '© OpenStreetMap'
-                }).addTo(map);
-            } else {
-                map.setView([currentLat, currentLon], 15);
-            }
+            // Update status
+            document.getElementById('status').className = 'success';
+            document.getElementById('status').innerHTML = `✅ Location acquired! Accuracy: ±${Math.round(accuracy)}m`;
             
-            if (marker !== null) {
-                map.removeLayer(marker);
-            }
-            marker = L.marker([currentLat, currentLon], {
-                icon: L.icon({
+            // Initialize map
+            const map = L. map('map').setView([currentLat, currentLon], 15);
+            L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+                attribution: '© OpenStreetMap',
+                maxZoom: 19
+            }).addTo(map);
+            
+            // Add user marker (red)
+            L.marker([currentLat, currentLon], {
+                icon:  L.icon({
                     iconUrl: 'https://raw.githubusercontent.com/pointhi/leaflet-color-markers/master/img/marker-icon-2x-red.png',
+                    shadowUrl: 'https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/images/marker-shadow.png',
                     iconSize: [25, 41],
-                    iconAnchor:  [12, 41],
-                    popupAnchor: [1, -34]
+                    iconAnchor: [12, 41],
+                    popupAnchor:  [1, -34],
+                    shadowSize: [41, 41]
                 })
             }).addTo(map).bindPopup('<b>📍 You are here!</b>').openPopup();
             
+            // Add accuracy circle
             L.circle([currentLat, currentLon], {
                 color: 'red',
                 fillColor: '#f03',
-                fillOpacity: 0.2,
+                fillOpacity: 0.15,
                 radius: accuracy
             }).addTo(map);
             
+            // Find nearest shelter
             let nearestShelter = null;
             let minDistance = Infinity;
             
-            shelters. forEach(shelter => {
+            shelters.forEach(shelter => {
                 const distance = calculateDistance(currentLat, currentLon, shelter.lat, shelter.lon);
-                
                 if (distance < minDistance) {
                     minDistance = distance;
                     nearestShelter = shelter;
                 }
-                
-                const shelterMarker = L.marker([shelter. lat, shelter.lon], {
-                    icon: L.icon({
-                        iconUrl: 'https://raw.githubusercontent.com/pointhi/leaflet-color-markers/master/img/marker-icon-2x-green.png',
-                        iconSize: [25, 41],
-                        iconAnchor: [12, 41],
-                        popupAnchor: [1, -34]
-                    })
-                }).addTo(map);
-                
-                shelterMarker.bindPopup(`
-                    <b>🏢 ${shelter. name}</b><br>
-                    Type: ${shelter.type}<br>
-                    Capacity: ${shelter.capacity}<br>
-                    Distance: ${(distance / 1000).toFixed(2)} km
-                `);
             });
             
+            // Add nearest shelter marker (green)
             if (nearestShelter) {
-                L.polyline([
-                    [currentLat, currentLon],
-                    [nearestShelter. lat, nearestShelter. lon]
-                ], {
-                    color: 'blue',
+                L.marker([nearestShelter.lat, nearestShelter.lon], {
+                    icon: L.icon({
+                        iconUrl: 'https://raw.githubusercontent.com/pointhi/leaflet-color-markers/master/img/marker-icon-2x-green.png',
+                        shadowUrl: 'https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/images/marker-shadow. png',
+                        iconSize:  [25, 41],
+                        iconAnchor: [12, 41],
+                        popupAnchor: [1, -34],
+                        shadowSize: [41, 41]
+                    })
+                }).addTo(map).bindPopup(`
+                    <b>🏢 ${nearestShelter.name}</b><br>
+                    Type: ${nearestShelter. type}<br>
+                    Distance: ${(minDistance / 1000).toFixed(2)} km<br>
+                    Est. Walk:  ${Math.round(minDistance / 83)} min
+                `);
+                
+                // Draw curved path
+                const path = createCurvedPath([currentLat, currentLon], [nearestShelter.lat, nearestShelter.lon]);
+                L.polyline(path, {
+                    color: '#2962FF',
                     weight: 4,
                     opacity: 0.7,
-                    dashArray:  '10, 10'
+                    dashArray: '10, 5',
+                    lineCap: 'round'
                 }).addTo(map);
                 
-                // Store nearest shelter data
-                nearestShelterData = {
+                // Fit map to show both markers
+                const bounds = L.latLngBounds([
+                    [currentLat, currentLon],
+                    [nearestShelter.lat, nearestShelter.lon]
+                ]);
+                map.fitBounds(bounds, { padding: [50, 50] });
+                
+                // Send data to Streamlit
+                const shelterData = {
                     name: nearestShelter.name,
                     distance: minDistance,
                     distanceKm: (minDistance / 1000).toFixed(2),
@@ -494,125 +501,69 @@ def get_live_location():
                     capacity: nearestShelter.capacity,
                     type: nearestShelter.type
                 };
-            }
-            
-            document.getElementById('info').style.display = 'block';
-            document.getElementById('info').innerHTML = 
-                `📍 <b>Your Location: </b><br>
-                Latitude: ${currentLat.toFixed(6)}<br>
-                Longitude: ${currentLon. toFixed(6)}<br>
-                Accuracy: ±${accuracy. toFixed(0)}m`;
-            
-            if (nearestShelter) {
-                document.getElementById('shelterInfo').style.display = 'block';
-                document. getElementById('shelterInfo').innerHTML = 
-                    `🏢 <b>Nearest Shelter:  ${nearestShelter.name}</b><br>
-                    📏 Distance: ${nearestShelterData.distanceKm} km (${nearestShelterData.distanceM}m)<br>
-                    👥 Capacity: ${nearestShelter.capacity}<br>
-                    ⏱️ Est. Walk Time: ${nearestShelterData.walkTime} minutes`;
-            }
-            
-            // Store data in localStorage for Streamlit to access
-            localStorage.setItem('gps_lat', currentLat);
-            localStorage.setItem('gps_lon', currentLon);
-            localStorage.setItem('gps_accuracy', accuracy);
-            if (nearestShelterData) {
-                localStorage.setItem('shelter_name', nearestShelterData.name);
-                localStorage. setItem('shelter_distance', nearestShelterData.distanceM);
-                localStorage.setItem('shelter_walk_time', nearestShelterData.walkTime);
-            }
-            
-            document.getElementById('shareBtn').style.display = 'inline-block';
-        }
-        
-        function shareLocation() {
-            if (currentLat && currentLon) {
-                // Send data to Streamlit
+                
                 window.parent.postMessage({
                     type: 'streamlit: setComponentValue',
                     lat: currentLat,
                     lon: currentLon,
-                    shelter:  nearestShelterData
+                    accuracy: accuracy,
+                    shelter: shelterData
                 }, '*');
-                
-                alert('✅ Location sent to Emergency Department!');
             }
         }
         
         function showError(error) {
-            alert("Please allow location access");
-        }
-        </script>
-    </body>
-    </html>
-    """
-    
-    # Return the component and capture the value
-    component_value = components.html(html, height=650)
-    
-    # Store in session state if data is received
-    if component_value:
-        if isinstance(component_value, dict):
-            st.session_state.emergency_location = {
-                'lat': component_value. get('lat'),
-                'lon': component_value.get('lon'),
-                'shelter': component_value.get('shelter')
+            let message = '';
+            switch(error.code) {
+                case error.PERMISSION_DENIED: 
+                    message = '❌ Location access denied. Please enable location permissions. ';
+                    break;
+                case error.POSITION_UNAVAILABLE:
+                    message = '❌ Location information unavailable. ';
+                    break;
+                case error.TIMEOUT:
+                    message = '❌ Location request timed out. ';
+                    break;
+                default:
+                    message = '❌ An unknown error occurred.';
             }
-    
-    return component_value
-# =============================================================================
-# 2. 定义地图组件 (只给 Tab 1 用)
-# =============================================================================
-def get_live_location():
-    """
-    纯展示用的地图：自动画出从 School of CS 到 Dewan Utama 的弯曲路线
-    """
-    html = """
-    <!DOCTYPE html>
-    <html>
-    <head>
-        <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
-        <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
-        <style>body { margin: 0; padding: 0; } #map { height: 450px; width: 100%; border-radius: 12px; }</style>
-    </head>
-    <body>
-        <div id="map"></div>
-        <script>
-        const START = [5.3540, 100.3015]; 
-        const END = [5.3565, 100.2985];   
-        const ROUTE_PATH = [
-            [5.3540, 100.3015], [5.3542, 100.3012], [5.3548, 100.3008], 
-            [5.3555, 100.3000], [5.3560, 100.2992], [5.3565, 100.2985]
-        ];
+            document.getElementById('status').className = 'error';
+            document.getElementById('status').innerHTML = message;
+        }
+        
+        // Auto-start GPS on load
         window.onload = function() {
-            var map = L.map('map', {zoomControl: false, attributionControl: false}).setView([5.3552, 100.3000], 16);
-            L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png').addTo(map);
-            L.marker(START, {icon: L.icon({iconUrl: 'https://raw.githubusercontent.com/pointhi/leaflet-color-markers/master/img/marker-icon-2x-red.png', iconSize: [25, 41], iconAnchor: [12, 41], popupAnchor: [1, -34]})}).addTo(map).bindPopup("<b>📍 You are here</b>").openPopup();
-            L.marker(END, {icon: L.icon({iconUrl: 'https://raw.githubusercontent.com/pointhi/leaflet-color-markers/master/img/marker-icon-2x-green.png', iconSize: [25, 41], iconAnchor: [12, 41], popupAnchor: [1, -34]})}).addTo(map).bindPopup("<b>🏃 SAFE ZONE: Dewan Utama</b>");
-            var routeLine = L.polyline(ROUTE_PATH, {color: '#2962FF', weight: 6, opacity: 0.8, dashArray: '12, 12', lineCap: 'round', lineJoin: 'round'}).addTo(map);
-            map.fitBounds(routeLine.getBounds(), {padding: [50, 50]});
-        }
+            if (navigator.geolocation) {
+                navigator.geolocation. getCurrentPosition(showPosition, showError, {
+                    enableHighAccuracy: true,
+                    timeout: 10000,
+                    maximumAge:  0
+                });
+            } else {
+                document.getElementById('status').className = 'error';
+                document.getElementById('status').innerHTML = '❌ Geolocation is not supported by your browser.';
+            }
+        };
         </script>
     </body>
     </html>
     """
-    components.html(html, height=450)
-
-    components.html(html, height=450)
     
-    # Return the component and capture the value
-    component_value = components.html(html, height=650)
+    # Single render
+    component_value = components.html(html, height=600)
     
-    # Store in session state if data is received
+    # Store GPS data when received
     if component_value:
         if isinstance(component_value, dict):
             st.session_state.emergency_location = {
-                'lat': component_value. get('lat'),
+                'lat': component_value.get('lat'),
                 'lon': component_value.get('lon'),
+                'accuracy': component_value.get('accuracy'),
                 'shelter': component_value.get('shelter')
             }
     
     return component_value
+
 # =============================================================================
 # PAGE HEADER
 # =============================================================================
@@ -628,7 +579,6 @@ st.divider()
 # =============================================================================
 # 3. SIDEBAR (保持列表样式)
 # =============================================================================
-# In your sidebar section: 
 with st.sidebar:
     st.subheader("📍 Live Status")
     
@@ -685,7 +635,7 @@ tab_emergency, tab_multi, tab_chat = st.tabs([
 ])
 
 # =============================================================================
-# 4. TAB 1: EMERGENCY RESPONSE (触发器)
+# 4. TAB 1: EMERGENCY RESPONSE (Trigger)
 # =============================================================================
 with tab_emergency:
     st.header("⚡ Quick Emergency Response")
@@ -698,15 +648,15 @@ with tab_emergency:
     col1, col2, col3 = st.columns(3)
     with col1:
         if st.button("🌊 Flood", use_container_width=True): st.session_state.selected_emergency = "Flood"
-        if st.button("🏥 Medical", use_container_width=True): st.session_state.selected_emergency = "Medical Emergency"
+        if st. button("🏥 Medical", use_container_width=True): st.session_state.selected_emergency = "Medical Emergency"
     with col2:
         if st.button("🔥 Fire", use_container_width=True): st.session_state.selected_emergency = "Fire"
         if st.button("🌪️ Natural Disaster", use_container_width=True): st.session_state.selected_emergency = "Natural Disaster"
     with col3:
-        if st.button("🚗 Accident", use_container_width=True): st.session_state.selected_emergency = "Accident"
+        if st. button("🚗 Accident", use_container_width=True): st.session_state.selected_emergency = "Accident"
         if st.button("🏢 Building", use_container_width=True): st.session_state.selected_emergency = "Building Emergency"
     
-    emergency_selected = st.session_state.selected_emergency
+    emergency_selected = st.session_state. selected_emergency
 
     if emergency_selected:
         st.divider()
@@ -714,26 +664,42 @@ with tab_emergency:
         
         if st.button("🔄 Change Type"):
             st.session_state.selected_emergency = None
+            st.session_state.confirm_dialog = False  # Reset confirmation
+            st.session_state.form_submitted = False  # Reset submission
             st.rerun()
 
         st.warning(f"⚠️ Activating Protocol for **{emergency_selected}**...")
 
-        with st.form(key="emergency_form"):
-            st.write(f"**Alert Message:** CRITICAL ALERT: {emergency_selected} at USM. GPS Tracking Activated.")
-            submit_emergency = st.form_submit_button("🚨 CONFIRM & REQUEST HELP", use_container_width=True)
+        # Initialize confirmation state
+        if "confirm_dialog" not in st.session_state:
+            st.session_state.confirm_dialog = False
         
-        # 🟢 点击 Confirm 后的逻辑
-        if submit_emergency or st.session_state.get("form_submitted"):
-            st.session_state.form_submitted = True 
+        st.write(f"**Alert Message:** CRITICAL ALERT: {emergency_selected} at USM. GPS Tracking Activated.")
+        
+        # First button - shows confirmation dialog
+        if not st.session_state.confirm_dialog and not st.session_state.get("form_submitted"):
+            if st.button("🚨 CONFIRM & REQUEST HELP", use_container_width=True, type="primary"):
+                st.session_state.confirm_dialog = True
+                st.rerun()
+        
+        # Confirmation dialog
+        if st.session_state.confirm_dialog:
+            st.warning("⚠️ **Are you sure you want to request emergency help?**")
+            col1, col2 = st.columns(2)
             
-            # 🔥 关键：在这里“激活”Sidebar
-            # 我们写入假坐标，Sidebar 就会读取这个坐标并生成列表，而不是地图！
-            st.session_state.emergency_location = {
-                'lat': 5.3540, 
-                'lon': 100.3015,
-                'shelter': {'name': 'Dewan Utama'} 
-            }
+            with col1:
+                if st.button("✅ YES, SEND ALERT", use_container_width=True, type="primary"):
+                    st.session_state.form_submitted = True
+                    st.session_state.confirm_dialog = False
+                    st.rerun()
             
+            with col2:
+                if st.button("❌ Cancel", use_container_width=True):
+                    st.session_state.confirm_dialog = False
+                    st.rerun()
+        
+        # 🟢 After confirmation
+        if st.session_state.get("form_submitted"):
             st.success("✅ ALERT SENT! Rescue team dispatched.")
             st.toast(f"🚨 {emergency_selected} Alert Broadcasted!", icon="📡")
             
@@ -747,23 +713,32 @@ with tab_emergency:
             }
             st.error(f"📢 **ACTION:** {advice_dict.get(emergency_selected, 'Evacuate now.')}")
 
-            # 仪表盘
+            # Metrics
             st.subheader(f"🗺️ Live Evacuation Route")
-            m1, m2, m3 = st.columns(3)
-            with m1: st.metric("Hazard Level", "CRITICAL ⚠️", "Zone Active")
-            with m2: st.metric("Nearest Shelter", "Dewan Utama", "500m away")
-            with m3: st.metric("Est. Evac Time", "8 mins", "Fastest Route")
+            
+            # Show metrics if GPS data available
+            loc = st.session_state.get('emergency_location')
+            if loc and loc.get('shelter'):
+                shelter_info = loc['shelter']
+                m1, m2, m3 = st.columns(3)
+                with m1: st.metric("Hazard Level", "CRITICAL ⚠️", "Zone Active")
+                with m2: st.metric("Nearest Shelter", shelter_info. get('name', 'Calculating...'), 
+                                  f"{shelter_info.get('distanceM', '?')}m away")
+                with m3: st.metric("Est. Walk Time", f"{shelter_info.get('walkTime', '?')} mins", "Fastest Route")
+            else:
+                st.info("📍 Acquiring GPS location...")
 
-            # 🟢 在这里显示 Tab 1 的地图
+            # 🟢 Auto-start GPS map
             get_live_location()
             
-            # 后台上传
+            # Backend upload
             if jamai_client and "upload_done" not in st.session_state:
-                 try:
-                     final_text = f"[{emergency_selected}] User at USM. Status: Critical."
-                     add_table_row(TABLE_IDS["text"], {"text": final_text})
-                     st.session_state.upload_done = True
-                 except: pass
+                try:
+                    final_text = f"[{emergency_selected}] User at USM. Status: Critical."
+                    add_table_row(TABLE_IDS["text"], {"text": final_text})
+                    st.session_state. upload_done = True
+                except: 
+                    pass
 # =============================================================================
 # TAB 2: MULTI-MODALITY FUSION
 # =============================================================================
