@@ -341,42 +341,42 @@ def get_table_schema(table_id):
 # 2. 定义地图组件 (只给 Tab 1 用)
 # =============================================================================
 def get_live_location():
-    """Get user's live GPS and show route to nearest shelter"""
+    """Auto-get user's GPS and show route to nearest shelter"""
     html = """
     <! DOCTYPE html>
     <html>
     <head>
-        <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet. css" />
+        <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
         <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
         <style>
-            #map { height:  450px; width: 100%; border-radius: 10px; }
-            .btn { 
-                background:  #ff4444; 
-                color: white; 
-                padding: 12px 24px; 
-                border: none; 
+            #map { height: 500px; width:  100%; border-radius: 10px; margin:  10px 0; }
+            #status { 
+                padding: 15px; 
+                background:  #f8f9fa; 
                 border-radius: 8px; 
-                cursor: pointer; 
-                font-size:  16px;
-                margin: 10px 5px;
+                margin: 10px 0;
+                text-align: center;
+                font-size: 16px;
+            }
+            .loading {
+                color: #007bff;
                 font-weight: bold;
             }
-            .btn:hover { background: #cc0000; }
-            .info { padding: 10px; background: #f0f0f0; border-radius: 5px; margin:  10px 0; }
-            .shelter-info { background: #28a745; color: white; padding: 5px; border-radius: 5px; margin-top: 10px; }
+            .success {
+                color: #28a745;
+                font-weight:  bold;
+            }
+            . error {
+                color: #dc3545;
+                font-weight: bold;
+            }
         </style>
     </head>
     <body>
-        <button class="btn" onclick="getLocation()">📍 Get My Location</button>
-        <div id="info" class="info" style="display: none;"></div>
-        <div id="shelterInfo" class="shelter-info" style="display:none;"></div>
+        <div id="status" class="loading">📡 Getting your location...</div>
         <div id="map"></div>
-        <script>
-        let map = null;
-        let currentLat = null;
-        let currentLon = null;
-        let nearestShelterData = null;
         
+        <script>
         const shelters = [
             {name: "Dewan Utama USM", lat: 5.3565, lon: 100.2985, capacity: "500 people", type: "Main Hall"},
             {name: "Dewan Tuanku Syed Putra", lat: 5.3545, lon: 100.3005, capacity: "300 people", type: "Hall"},
@@ -392,47 +392,63 @@ def get_live_location():
             const Δφ = (lat2 - lat1) * Math.PI / 180;
             const Δλ = (lon2 - lon1) * Math.PI / 180;
             const a = Math.sin(Δφ/2) * Math.sin(Δφ/2) + Math.cos(φ1) * Math.cos(φ2) * Math.sin(Δλ/2) * Math.sin(Δλ/2);
-            const c = 2 * Math.atan2(Math. sqrt(a), Math.sqrt(1-a));
+            const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1-a));
             return R * c;
         }
         
-        function getLocation() {
-            if (navigator.geolocation) {
-                navigator.geolocation.getCurrentPosition(showPosition, showError);
-            } else {
-                alert("Geolocation not supported");
+        function createCurvedPath(start, end, numPoints = 20) {
+            const points = [];
+            for (let i = 0; i <= numPoints; i++) {
+                const t = i / numPoints;
+                const curve = Math.sin(t * Math.PI) * 0.002;
+                const lat = start[0] + (end[0] - start[0]) * t + curve;
+                const lon = start[1] + (end[1] - start[1]) * t - curve;
+                points.push([lat, lon]);
             }
+            return points;
         }
         
         function showPosition(position) {
-            currentLat = position.coords.latitude;
-            currentLon = position.coords.longitude;
+            const currentLat = position.coords.latitude;
+            const currentLon = position.coords.longitude;
             const accuracy = position.coords.accuracy;
             
-            if (map === null) {
-                map = L.map('map').setView([currentLat, currentLon], 15);
-                L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
-                    attribution: '© OpenStreetMap'
-                }).addTo(map);
-            } else {
-                map.setView([currentLat, currentLon], 15);
-            }
+            // Update status
+            document.getElementById('status').className = 'success';
+            document.getElementById('status').innerHTML = `✅ Location acquired! Accuracy: ±${Math.round(accuracy)}m`;
             
-            // Add user marker
+            // Initialize map
+            const map = L. map('map').setView([currentLat, currentLon], 15);
+            L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+                attribution: '© OpenStreetMap',
+                maxZoom: 19
+            }).addTo(map);
+            
+            // Add user marker (red)
             L.marker([currentLat, currentLon], {
                 icon:  L.icon({
                     iconUrl: 'https://raw.githubusercontent.com/pointhi/leaflet-color-markers/master/img/marker-icon-2x-red.png',
+                    shadowUrl: 'https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/images/marker-shadow.png',
                     iconSize: [25, 41],
-                    iconAnchor:  [12, 41],
-                    popupAnchor: [1, -34]
+                    iconAnchor: [12, 41],
+                    popupAnchor:  [1, -34],
+                    shadowSize: [41, 41]
                 })
-            }).addTo(map).bindPopup('<b>📍 You are here! </b>').openPopup();
+            }).addTo(map).bindPopup('<b>📍 You are here!</b>').openPopup();
+            
+            // Add accuracy circle
+            L.circle([currentLat, currentLon], {
+                color: 'red',
+                fillColor: '#f03',
+                fillOpacity: 0.15,
+                radius: accuracy
+            }).addTo(map);
             
             // Find nearest shelter
             let nearestShelter = null;
             let minDistance = Infinity;
             
-            shelters. forEach(shelter => {
+            shelters.forEach(shelter => {
                 const distance = calculateDistance(currentLat, currentLon, shelter.lat, shelter.lon);
                 if (distance < minDistance) {
                     minDistance = distance;
@@ -440,30 +456,44 @@ def get_live_location():
                 }
             });
             
-            // Show ONLY nearest shelter on map
+            // Add nearest shelter marker (green)
             if (nearestShelter) {
                 L.marker([nearestShelter.lat, nearestShelter.lon], {
                     icon: L.icon({
                         iconUrl: 'https://raw.githubusercontent.com/pointhi/leaflet-color-markers/master/img/marker-icon-2x-green.png',
-                        iconSize: [25, 41],
+                        shadowUrl: 'https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/images/marker-shadow. png',
+                        iconSize:  [25, 41],
                         iconAnchor: [12, 41],
-                        popupAnchor: [1, -34]
+                        popupAnchor: [1, -34],
+                        shadowSize: [41, 41]
                     })
-                }).addTo(map).bindPopup(`<b>🏢 ${nearestShelter.name}</b><br>Distance: ${(minDistance / 1000).toFixed(2)} km`);
+                }).addTo(map).bindPopup(`
+                    <b>🏢 ${nearestShelter.name}</b><br>
+                    Type: ${nearestShelter. type}<br>
+                    Distance: ${(minDistance / 1000).toFixed(2)} km<br>
+                    Est. Walk:  ${Math.round(minDistance / 83)} min
+                `);
                 
-                // Draw path to nearest shelter
-                L.polyline([
-                    [currentLat, currentLon],
-                    [nearestShelter.lat, nearestShelter.lon]
-                ], {
-                    color: 'blue',
+                // Draw curved path
+                const path = createCurvedPath([currentLat, currentLon], [nearestShelter.lat, nearestShelter.lon]);
+                L.polyline(path, {
+                    color: '#2962FF',
                     weight: 4,
                     opacity: 0.7,
-                    dashArray: '10, 10'
+                    dashArray: '10, 5',
+                    lineCap: 'round'
                 }).addTo(map);
                 
-                nearestShelterData = {
-                    name:  nearestShelter.name,
+                // Fit map to show both markers
+                const bounds = L.latLngBounds([
+                    [currentLat, currentLon],
+                    [nearestShelter.lat, nearestShelter.lon]
+                ]);
+                map.fitBounds(bounds, { padding: [50, 50] });
+                
+                // Send data to Streamlit
+                const shelterData = {
+                    name: nearestShelter.name,
                     distance: minDistance,
                     distanceKm: (minDistance / 1000).toFixed(2),
                     distanceM: Math.round(minDistance),
@@ -472,45 +502,63 @@ def get_live_location():
                     type: nearestShelter.type
                 };
                 
-                document.getElementById('shelterInfo').style.display = 'block';
-                document.getElementById('shelterInfo').innerHTML = 
-                    `🏢 <b>Nearest Shelter:  ${nearestShelter.name}</b><br>
-                    📏 Distance: ${nearestShelterData.distanceKm} km (${nearestShelterData. distanceM}m)<br>
-                    ⏱️ Est. Walk Time: ${nearestShelterData.walkTime} minutes`;
+                window.parent.postMessage({
+                    type: 'streamlit: setComponentValue',
+                    lat: currentLat,
+                    lon: currentLon,
+                    accuracy: accuracy,
+                    shelter: shelterData
+                }, '*');
             }
-            
-            document.getElementById('info').style.display = 'block';
-            document.getElementById('info').innerHTML = 
-                `📍 <b>Your Location:</b><br>
-                Latitude: ${currentLat.toFixed(6)}<br>
-                Longitude: ${currentLon. toFixed(6)}<br>
-                Accuracy: ±${accuracy. toFixed(0)}m`;
-            
-            // Send data to Streamlit
-            window.parent.postMessage({
-                type: 'streamlit: setComponentValue',
-                lat: currentLat,
-                lon: currentLon,
-                shelter: nearestShelterData
-            }, '*');
         }
         
         function showError(error) {
-            alert("Please allow location access");
+            let message = '';
+            switch(error.code) {
+                case error.PERMISSION_DENIED: 
+                    message = '❌ Location access denied. Please enable location permissions. ';
+                    break;
+                case error.POSITION_UNAVAILABLE:
+                    message = '❌ Location information unavailable. ';
+                    break;
+                case error.TIMEOUT:
+                    message = '❌ Location request timed out. ';
+                    break;
+                default:
+                    message = '❌ An unknown error occurred.';
+            }
+            document.getElementById('status').className = 'error';
+            document.getElementById('status').innerHTML = message;
         }
+        
+        // Auto-start GPS on load
+        window.onload = function() {
+            if (navigator.geolocation) {
+                navigator.geolocation. getCurrentPosition(showPosition, showError, {
+                    enableHighAccuracy: true,
+                    timeout: 10000,
+                    maximumAge:  0
+                });
+            } else {
+                document.getElementById('status').className = 'error';
+                document.getElementById('status').innerHTML = '❌ Geolocation is not supported by your browser.';
+            }
+        };
         </script>
     </body>
     </html>
     """
     
-    # Single render only
-    component_value = components.html(html, height=650)
+    # Single render
+    component_value = components.html(html, height=600)
     
+    # Store GPS data when received
     if component_value:
         if isinstance(component_value, dict):
             st.session_state.emergency_location = {
                 'lat': component_value.get('lat'),
                 'lon': component_value.get('lon'),
+                'accuracy': component_value.get('accuracy'),
                 'shelter': component_value.get('shelter')
             }
     
@@ -652,10 +700,6 @@ with tab_emergency:
         
         # 🟢 After confirmation
         if st.session_state.get("form_submitted"):
-            # Check if GPS data exists
-            if not st.session_state.get('emergency_location'):
-                st.info("📍 Click 'Get My Location' button on the map below to enable GPS tracking")
-            
             st.success("✅ ALERT SENT! Rescue team dispatched.")
             st.toast(f"🚨 {emergency_selected} Alert Broadcasted!", icon="📡")
             
@@ -669,23 +713,32 @@ with tab_emergency:
             }
             st.error(f"📢 **ACTION:** {advice_dict.get(emergency_selected, 'Evacuate now.')}")
 
-            # 仪表盘
-            st. subheader(f"🗺️ Live Evacuation Route")
-            m1, m2, m3 = st.columns(3)
-            with m1: st.metric("Hazard Level", "CRITICAL ⚠️", "Zone Active")
-            with m2: st.metric("Nearest Shelter", "Dewan Utama", "500m away")
-            with m3: st.metric("Est.  Evac Time", "8 mins", "Fastest Route")
+            # Metrics
+            st.subheader(f"🗺️ Live Evacuation Route")
+            
+            # Show metrics if GPS data available
+            loc = st.session_state.get('emergency_location')
+            if loc and loc.get('shelter'):
+                shelter_info = loc['shelter']
+                m1, m2, m3 = st.columns(3)
+                with m1: st.metric("Hazard Level", "CRITICAL ⚠️", "Zone Active")
+                with m2: st.metric("Nearest Shelter", shelter_info. get('name', 'Calculating...'), 
+                                  f"{shelter_info.get('distanceM', '?')}m away")
+                with m3: st.metric("Est. Walk Time", f"{shelter_info.get('walkTime', '?')} mins", "Fastest Route")
+            else:
+                st.info("📍 Acquiring GPS location...")
 
-            # 🟢 在这里显示 Tab 1 的地图
+            # 🟢 Auto-start GPS map
             get_live_location()
             
-            # 后台上传
+            # Backend upload
             if jamai_client and "upload_done" not in st.session_state:
-                 try: 
-                     final_text = f"[{emergency_selected}] User at USM. Status: Critical."
-                     add_table_row(TABLE_IDS["text"], {"text": final_text})
-                     st.session_state. upload_done = True
-                 except: pass
+                try:
+                    final_text = f"[{emergency_selected}] User at USM. Status: Critical."
+                    add_table_row(TABLE_IDS["text"], {"text": final_text})
+                    st.session_state. upload_done = True
+                except: 
+                    pass
 # =============================================================================
 # TAB 2: MULTI-MODALITY FUSION
 # =============================================================================
