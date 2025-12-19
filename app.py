@@ -1,3 +1,5 @@
+from gps_component import get_live_location
+
 import random
 import streamlit as st
 import tempfile
@@ -5,7 +7,7 @@ import os
 import time
 from jamaibase import JamAI
 from jamaibase.protocol import MultiRowAddRequest
-
+import streamlit. components.v1 as components
 
 # =============================================================================
 # PAGE CONFIGURATION
@@ -328,20 +330,41 @@ st.divider()
 # =============================================================================
 # SIDEBAR - DEBUG AND CONFIGURATION
 # =============================================================================
+# In your sidebar section: 
 with st.sidebar:
-    current_path = os.path.dirname(os.path.abspath(__file__))
-    image_path = os.path.join(current_path, "images", "usm_flood_map.jpg") 
+    st. subheader("📍 Your Live Location")
     
-    if os.path.exists(image_path):
-        st.image(image_path, caption="📍 Current Location: USM", use_container_width=True)
-    else:
-        st.error("Local image not found, using alternative map.")
-        st.image("https://maps.googleapis.com/maps/api/staticmap?center=USM+Penang&zoom=15&size=600x400&maptype=roadmap&markers=color:red%7Clabel:S%7CUSM", use_container_width=True)
-    # -------------------
-
-    st.success("🟢 System Online: Connected to Help Center")
+    # Initialize session state for GPS
+    if 'gps_shared' not in st.session_state:
+        st.session_state.gps_shared = False
+    
+    # Display GPS component
+    get_live_location()
+    
+    # Manual check if user wants to share (alternative method)
+    st.markdown("---")
+    
+    # Manual location input as backup
+    with st.expander("🔧 Manual Location Entry"):
+        manual_lat = st.number_input("Latitude", value=5.3567, format="%.6f", key="manual_lat")
+        manual_lon = st.number_input("Longitude", value=100.3013, format="%.6f", key="manual_lon")
+        
+        if st.button("📤 Use Manual Location"):
+            st.session_state.emergency_location = {
+                'lat': manual_lat,
+                'lon': manual_lon,
+                'timestamp': time.strftime('%Y-%m-%d %H:%M:%S')
+            }
+            st.success("✅ Manual location saved!")
+    
+    # Show saved location if available
+    if 'emergency_location' in st. session_state:
+        loc = st.session_state.emergency_location
+        st.success("✅ Location Ready!")
+        st.caption(f"📍 {loc['lat']:.6f}, {loc['lon']:.6f}")
+    
     st.divider()
-    # -------------------------------------
+    st.success("🟢 System Online:  Connected to Help Center")
 
 # =============================================================================
 # MAIN TABS
