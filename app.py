@@ -5,6 +5,8 @@ import os
 import time
 from jamaibase import JamAI
 from jamaibase.protocol import MultiRowAddRequest
+import streamlit as st
+import streamlit.components.v1 as components
 
 # =============================================================================
 # PAGE CONFIGURATION
@@ -107,6 +109,73 @@ if API_KEY and PROJECT_ID:
         jamai_client = None
 else:
     st.sidebar. warning("⚠️ JamAI credentials not configured")
+    
+# =============================================================================
+# Simple Copy-Paste GPS Component
+# =============================================================================
+def gps_locator():
+    """Simple GPS locator component"""
+    html = """
+    <! DOCTYPE html>
+    <html>
+    <body>
+    <button onclick="getLocation()" style="
+        background-color: #ff4444;
+        color: white;
+        padding: 10px 20px;
+        border: none;
+        border-radius: 5px;
+        cursor: pointer;
+        font-size: 16px;">
+        📍 Get My Location
+    </button>
+    <p id="demo"></p>
+    
+    <script>
+    function getLocation() {
+        if (navigator.geolocation) {
+            navigator.geolocation.getCurrentPosition(showPosition, showError);
+        } else {
+            document.getElementById("demo").innerHTML = "Geolocation is not supported by this browser.";
+        }
+    }
+    
+    function showPosition(position) {
+        const lat = position.coords.latitude;
+        const lon = position.coords.longitude;
+        const acc = position.coords.accuracy;
+        
+        document.getElementById("demo").innerHTML = 
+            "Latitude: " + lat + "<br>Longitude: " + lon + "<br>Accuracy: ±" + acc. toFixed(0) + "m";
+        
+        // Send to Streamlit
+        window. parent.postMessage({
+            type: 'streamlit:setComponentValue',
+            lat: lat,
+            lon: lon,
+            accuracy: acc
+        }, '*');
+    }
+    
+    function showError(error) {
+        switch(error.code) {
+            case error.PERMISSION_DENIED:
+                document.getElementById("demo").innerHTML = "User denied the request for Geolocation."
+                break;
+            case error.POSITION_UNAVAILABLE: 
+                document.getElementById("demo").innerHTML = "Location information is unavailable."
+                break;
+            case error.TIMEOUT:
+                document.getElementById("demo").innerHTML = "The request to get user location timed out."
+                break;
+        }
+    }
+    </script>
+    </body>
+    </html>
+    """
+    
+    return components.html(html, height=150)
 
 # =============================================================================
 # HELPER FUNCTIONS
