@@ -7,6 +7,29 @@ import time
 from jamaibase import JamAI
 from jamaibase.protocol import MultiRowAddRequest
 import streamlit. components.v1 as components
+import math
+
+# =============================================================================
+# 1. 设置避难所数据 (给 Sidebar 用)
+# =============================================================================
+SHELTERS = [
+    {"name": "Dewan Utama USM", "lat": 5.3565, "lon": 100.2985, "type": "Main Hall"},
+    {"name": "Dewan Tuanku Syed Putra", "lat": 5.3545, "lon": 100.3005, "type": "Hall"},
+    {"name": "Kompleks Sukan USM", "lat": 5.3580, "lon": 100.2995, "type": "Sports Complex"},
+    {"name": "Hospital USM", "lat": 5.3598, "lon": 100.2993, "type": "Hospital"},
+    {"name": "Masjid USM", "lat": 5.3552, "lon": 100.3020, "type": "Mosque"}
+]
+
+def calculate_distance_py(lat1, lon1, lat2, lon2):
+    """Python 后台计算距离，专门给 Sidebar 列表用"""
+    R = 6371000 # 地球半径 (米)
+    phi1 = lat1 * math.pi / 180
+    phi2 = lat2 * math.pi / 180
+    dphi = (lat2 - lat1) * math.pi / 180
+    dlambda = (lon2 - lon1) * math.pi / 180
+    a = math.sin(dphi/2)**2 + math.cos(phi1)*math.cos(phi2) * math.sin(dlambda/2)**2
+    c = 2 * math.atan2(math.sqrt(a), math.sqrt(1-a))
+    return int(R * c)
 
 # =============================================================================
 # PAGE CONFIGURATION
@@ -538,6 +561,59 @@ def get_live_location():
     
     return component_value
 # =============================================================================
+# 2. 定义地图组件 (只给 Tab 1 用)
+# =============================================================================
+def get_live_location():
+    """
+    纯展示用的地图：自动画出从 School of CS 到 Dewan Utama 的弯曲路线
+    """
+    html = """
+    <!DOCTYPE html>
+    <html>
+    <head>
+        <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
+        <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+        <style>body { margin: 0; padding: 0; } #map { height: 450px; width: 100%; border-radius: 12px; }</style>
+    </head>
+    <body>
+        <div id="map"></div>
+        <script>
+        const START = [5.3540, 100.3015]; 
+        const END = [5.3565, 100.2985];   
+        const ROUTE_PATH = [
+            [5.3540, 100.3015], [5.3542, 100.3012], [5.3548, 100.3008], 
+            [5.3555, 100.3000], [5.3560, 100.2992], [5.3565, 100.2985]
+        ];
+        window.onload = function() {
+            var map = L.map('map', {zoomControl: false, attributionControl: false}).setView([5.3552, 100.3000], 16);
+            L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png').addTo(map);
+            L.marker(START, {icon: L.icon({iconUrl: 'https://raw.githubusercontent.com/pointhi/leaflet-color-markers/master/img/marker-icon-2x-red.png', iconSize: [25, 41], iconAnchor: [12, 41], popupAnchor: [1, -34]})}).addTo(map).bindPopup("<b>📍 You are here</b>").openPopup();
+            L.marker(END, {icon: L.icon({iconUrl: 'https://raw.githubusercontent.com/pointhi/leaflet-color-markers/master/img/marker-icon-2x-green.png', iconSize: [25, 41], iconAnchor: [12, 41], popupAnchor: [1, -34]})}).addTo(map).bindPopup("<b>🏃 SAFE ZONE: Dewan Utama</b>");
+            var routeLine = L.polyline(ROUTE_PATH, {color: '#2962FF', weight: 6, opacity: 0.8, dashArray: '12, 12', lineCap: 'round', lineJoin: 'round'}).addTo(map);
+            map.fitBounds(routeLine.getBounds(), {padding: [50, 50]});
+        }
+        </script>
+    </body>
+    </html>
+    """
+    components.html(html, height=450)
+
+    components.html(html, height=450)
+    
+    # Return the component and capture the value
+    component_value = components.html(html, height=650)
+    
+    # Store in session state if data is received
+    if component_value:
+        if isinstance(component_value, dict):
+            st.session_state.emergency_location = {
+                'lat': component_value. get('lat'),
+                'lon': component_value.get('lon'),
+                'shelter': component_value.get('shelter')
+            }
+    
+    return component_value
+# =============================================================================
 # PAGE HEADER
 # =============================================================================
 st.title("🚨 AERN - AI Emergency Response Navigator")
@@ -550,44 +626,55 @@ recommended actions, and connect with emergency services faster.
 st.divider()
 
 # =============================================================================
-# SIDEBAR - DEBUG AND CONFIGURATION
+# 3. SIDEBAR (保持列表样式)
 # =============================================================================
 # In your sidebar section: 
 with st.sidebar:
-    st. subheader("📍 Your Live Location")
+    st.subheader("📍 Live Status")
     
-    # Initialize session state properly
-    if 'emergency_location' not in st.session_state:
-        st.session_state.emergency_location = None
+    # 获取坐标状态
+    loc = st.session_state.get('emergency_location')
     
-    # Get GPS location
-    location_data = get_live_location()
-    
-    # Display saved location status
-    if st. session_state.emergency_location:
-        loc = st.session_state.emergency_location
+    if loc and loc.get('lat'):
+        # 🟢 如果有坐标 (Tab 1 按钮点击后)，显示列表
+        user_lat = loc['lat']
+        user_lon = loc['lon']
         
-        # Safely check if loc is a dict
-        if isinstance(loc, dict):
-            lat = loc.get('lat')
-            lon = loc.get('lon')
-            shelter = loc.get('shelter')
+        st.success(f"🟢 GPS Connected")
+        st.caption(f"Lat: {user_lat:.4f}, Lon: {user_lon:.4f}")
+        
+        st.divider()
+        st.subheader("🏢 Nearby Safe Zones")
+        
+        # 这里的代码负责算出所有避难所的距离，并排序
+        shelter_list_with_dist = []
+        for s in SHELTERS:
+            dist = calculate_distance_py(user_lat, user_lon, s['lat'], s['lon'])
+            shelter_list_with_dist.append({**s, "dist": dist})
+        
+        # 按距离排序
+        shelter_list_with_dist.sort(key=lambda x: x['dist'])
+        
+        # 显示列表
+        for s in shelter_list_with_dist:
+            if s == shelter_list_with_dist[0]:
+                st.markdown(f"**🌟 {s['name']} (NEAREST)**")
+                st.progress(100, text="Recommended")
+            else:
+                st.markdown(f"**{s['name']}**")
             
-            if lat and lon: 
-                st.success("✅ GPS Location Saved!")
-                st.caption(f"📍 {lat:. 6f}, {lon:.6f}")
-                
-                if shelter and isinstance(shelter, dict):
-                    shelter_name = shelter.get('name', 'N/A')
-                    shelter_dist = shelter.get('distanceM', 'N/A')
-                    st.info(f"🏢 Nearest:  {shelter_name}\n📏 {shelter_dist}m away")
-        else:
-            st.info("📍 Click 'Get My Location' above")
+            st.caption(f"📏 {s['dist']}m away • Type: {s['type']}")
+            st.markdown("---")
+            
     else:
-        st.info("📍 Click 'Get My Location' to start")
-    
-    st.divider()
-    st.success("🟢 System Online:  Connected to Help Center")   
+        # 🔴 如果没有坐标，显示等待状态 (Demo 开始前的状态)
+        st.info("📡 Waiting for Alert Signal...")
+        st.caption("Click 'CONFIRM' in Emergency Tab to activate tracking.")
+        
+        st.divider()
+        st.subheader("🏢 USM Shelters Database")
+        for s in SHELTERS:
+             st.text(f"• {s['name']}")
 # =============================================================================
 # MAIN TABS
 # =============================================================================
@@ -598,206 +685,85 @@ tab_emergency, tab_multi, tab_chat = st.tabs([
 ])
 
 # =============================================================================
-# TAB 1: EMERGENCY RESPONSE
+# 4. TAB 1: EMERGENCY RESPONSE (触发器)
 # =============================================================================
 with tab_emergency:
     st.header("⚡ Quick Emergency Response")
     st.info("Select your emergency type for rapid assessment and guidance")
     
-    # 1. initialize Session State (如果还没有记忆，先创建一个空的)
     if "selected_emergency" not in st.session_state:
         st.session_state.selected_emergency = None
 
-    # Emergency type buttons
+    # 按钮区域
     col1, col2, col3 = st.columns(3)
-    
-    # 2. 修改按钮逻辑：点击时把结果存进 Session State
     with col1:
-        if st.button("🌊 Flood", use_container_width=True):
-            st.session_state.selected_emergency = "Flood"
-        if st.button("🏥 Medical Emergency", use_container_width=True):
-            st.session_state.selected_emergency = "Medical Emergency"
-    
+        if st.button("🌊 Flood", use_container_width=True): st.session_state.selected_emergency = "Flood"
+        if st.button("🏥 Medical", use_container_width=True): st.session_state.selected_emergency = "Medical Emergency"
     with col2:
-        if st.button("🔥 Fire", use_container_width=True):
-            st.session_state.selected_emergency = "Fire"
-        if st.button("🌪️ Natural Disaster", use_container_width=True):
-            st.session_state.selected_emergency = "Natural Disaster"
-    
+        if st.button("🔥 Fire", use_container_width=True): st.session_state.selected_emergency = "Fire"
+        if st.button("🌪️ Natural Disaster", use_container_width=True): st.session_state.selected_emergency = "Natural Disaster"
     with col3:
-        if st.button("🚗 Accident", use_container_width=True):
-            st.session_state.selected_emergency = "Accident"
-        if st.button("🏢 Building Emergency", use_container_width=True):
-            st.session_state.selected_emergency = "Building Emergency"
+        if st.button("🚗 Accident", use_container_width=True): st.session_state.selected_emergency = "Accident"
+        if st.button("🏢 Building", use_container_width=True): st.session_state.selected_emergency = "Building Emergency"
     
-    # 3. 从 Session State 读取当前的选择
-    # 这样即使页面刷新，它依然记得你是 "Flood"
     emergency_selected = st.session_state.selected_emergency
 
     if emergency_selected:
-        # --- 🎬 第二幕：一键求救 (用户界面) ---
         st.divider()
-        st.markdown(f"### 🚨 You are reporting: **{emergency_selected}**")
+        st.markdown(f"### 🚨 Reporting: **{emergency_selected}**")
         
-        # 加一个重置按钮，让用户可以重新选灾害类型
-        if st.button("🔄 Change Emergency Type"):
+        if st.button("🔄 Change Type"):
             st.session_state.selected_emergency = None
             st.rerun()
 
-        st.warning("⚠️ Press the button below to alert Help Center immediately.")
+        st.warning(f"⚠️ Activating Protocol for **{emergency_selected}**...")
 
         with st.form(key="emergency_form"):
-            # --- 🎬 后台秘密：自动生成求救信 (代替用户手写) ---
-            emergency_text = f"CRITICAL ALERT: {emergency_selected} reported at USM Main Campus. Immediate assistance required. Coordinates: 5.3567° N, 100.3013° E."
-            
-            # 红色大按钮
+            st.write(f"**Alert Message:** CRITICAL ALERT: {emergency_selected} at USM. GPS Tracking Activated.")
             submit_emergency = st.form_submit_button("🚨 CONFIRM & REQUEST HELP", use_container_width=True)
         
-        # if submit_emergency:
-        #     # --- 🎬 第一秒：心理安抚 (Reassurance) ---
-        #     st.success("✅ REPORT SENT TO Help Centre! Rescue team notified.")
-        #     st.toast("🚨 Alert sent to nearest police station!", icon="🚓")
+        # 🟢 点击 Confirm 后的逻辑
+        if submit_emergency or st.session_state.get("form_submitted"):
+            st.session_state.form_submitted = True 
+            
+            # 🔥 关键：在这里“激活”Sidebar
+            # 我们写入假坐标，Sidebar 就会读取这个坐标并生成列表，而不是地图！
+            st.session_state.emergency_location = {
+                'lat': 5.3540, 
+                'lon': 100.3015,
+                'shelter': {'name': 'Dewan Utama'} 
+            }
+            
+            st.success("✅ ALERT SENT! Rescue team dispatched.")
+            st.toast(f"🚨 {emergency_selected} Alert Broadcasted!", icon="📡")
+            
+            advice_dict = {
+                "Flood": "🌊 Move to HIGHER GROUND immediately.",
+                "Fire": "🔥 Evacuate via STAIRS.",
+                "Medical Emergency": "🏥 Clear space for ambulance.",
+                "Accident": "🚗 Do not move injured persons.",
+                "Natural Disaster": "🌪️ Find cover immediately.",
+                "Building Emergency": "🏢 Exit away from glass."
+            }
+            st.error(f"📢 **ACTION:** {advice_dict.get(emergency_selected, 'Evacuate now.')}")
 
-        #     # --- 🎬 第二秒：逃生指引 (Guidance) ---
-        #     if emergency_selected == "Flood":
-        #         st.divider()
-        #         st.error("🚨 IMMEDIATE ACTION: Here is your evacuation route.")
-                
-        #         # 仪表盘
-        #         st.subheader("📡 Real-time Analysis")
-        #         m1, m2, m3 = st.columns(3)
-        #         with m1:
-        #             st.metric(label="Water Level", value="CRITICAL ⚠️", delta="Rising (+15cm)")
-        #         with m2:
-        #             st.metric(label="Nearest Shelter", value="Dewan Utama", delta="500m")
-        #         with m3:
-        #             st.metric(label="Est. Evac Time", value="8 mins", delta="Fastest Route")
+            # 仪表盘
+            st.subheader(f"🗺️ Live Evacuation Route")
+            m1, m2, m3 = st.columns(3)
+            with m1: st.metric("Hazard Level", "CRITICAL ⚠️", "Zone Active")
+            with m2: st.metric("Nearest Shelter", "Dewan Utama", "500m away")
+            with m3: st.metric("Est. Evac Time", "8 mins", "Fastest Route")
 
-        #         # 战术地图
-        #         st.subheader("🗺️ Recommended Evacuation Route")
-        #         current_path = os.path.dirname(os.path.abspath(__file__))
-        #         map_path = os.path.join(current_path, "images", "usm_flood_map.jpg") 
-                
-        #         if os.path.exists(map_path):
-        #             st.image(map_path, caption="🟢 ACTION: Follow the BLUE LINE to Higher Ground!", use_container_width=True)
-        #         else:
-        #             st.warning("Map loading...")
+            # 🟢 在这里显示 Tab 1 的地图
+            get_live_location()
             
-        #     # --- 🎬 后台处理：静默发送给 AI ---
-        #     emergency_data = {}
-        #     if emergency_text:
-        #         emergency_data["text"] = f"[{emergency_selected}] {emergency_text}"
-            
-        #     if emergency_data and jamai_client:
-        #         try:
-        #             table_id = TABLE_IDS["text"]
-        #             response = add_table_row(table_id, emergency_data)
-        #             data = parse_response_data(response)
-        #         except Exception as e:
-        #             print(f"Background upload failed: {e}")
-        # In TAB 1:  EMERGENCY RESPONSE section, replace the flood handling code: 
-
-        if submit_emergency:
-            st.success("✅ REPORT SENT TO Help Centre!  Rescue team notified.")
-            st.toast("🚨 Alert sent to nearest police station!", icon="🚓")
-
-            # Safely get shelter data from session state
-            emergency_location = st.session_state.get('emergency_location')
-            shelter_data = None
-            
-            if emergency_location and isinstance(emergency_location, dict):
-                shelter_data = emergency_location.get('shelter')
-            
-            if emergency_selected == "Flood":
-                st.divider()
-                st.error("🚨 IMMEDIATE ACTION:  Here is your evacuation route.")
-                
-                # Real-time Analysis Dashboard
-                st.subheader("📡 Real-time Analysis")
-                m1, m2, m3 = st.columns(3)
-                
-                with m1:
-                    st.metric(label="Water Level", value="CRITICAL ⚠️", delta="Rising (+15cm)")
-                
-                with m2:
-                    # Use REAL shelter data from GPS
-                    if shelter_data and isinstance(shelter_data, dict):
-                        shelter_name = shelter_data.get('name', 'Dewan Utama')
-                        shelter_distance = shelter_data.get('distanceM', 500)
-                        st.metric(
-                            label="Nearest Shelter", 
-                            value=shelter_name, 
-                            delta=f"{shelter_distance}m away"
-                        )
-                    else:
-                        st.metric(label="Nearest Shelter", value="Checking.. .", delta="Use GPS in sidebar")
-                
-                with m3:
-                    # Use REAL walk time from GPS
-                    if shelter_data and isinstance(shelter_data, dict):
-                        walk_time = shelter_data.get('walkTime', 8)
-                        st.metric(
-                            label="Est.  Evac Time", 
-                            value=f"{walk_time} mins", 
-                            delta="Fastest Route"
-                        )
-                    else:
-                        st.metric(label="Est. Evac Time", value="Calculating...", delta="GPS Required")
-                
-                # Show the GPS MAP
-                st.subheader("🗺️ Your Live Evacuation Route")
-                
-                if emergency_location and emergency_location.get('lat'):
-                    # Display the live GPS map with route
-                    st.info("📍 This map shows YOUR current location and route to nearest shelter")
-                    get_live_location()
-                else:
-                    # Fallback to static map if GPS not available
-                    st.warning("⚠️ GPS not detected. Please click 'Get My Location' in the sidebar first!")
-                    
-                    # Still show a map option
-                    if st.button("📍 Enable GPS Now", type="primary"):
-                        st.info("👈 Check the sidebar to enable GPS location")
-                    
-                    # Show static map as backup
-                    current_path = os.path.dirname(os.path.abspath(__file__))
-                    map_path = os.path.join(current_path, "images", "usm_flood_map.jpg") 
-                    
-                    if os.path.exists(map_path):
-                        st.image(map_path, caption="🟢 Default evacuation route (Enable GPS for personalized route)", use_container_width=True)
-            
-            # Prepare emergency data
-            emergency_data = {}
-            
-            if emergency_location and emergency_location.get('lat'):
-                # GPS data available
-                lat = emergency_location.get('lat', 'N/A')
-                lon = emergency_location.get('lon', 'N/A')
-                
-                if shelter_data and isinstance(shelter_data, dict):
-                    shelter_name = shelter_data.get('name', 'Unknown')
-                    shelter_dist = shelter_data.get('distanceM', 'N/A')
-                    emergency_text = f"""CRITICAL ALERT:  {emergency_selected} at USM Campus
-        GPS: {lat}°N, {lon}°E
-        Nearest Shelter: {shelter_name} ({shelter_dist}m away)
-        Immediate assistance required."""
-                else:
-                    emergency_text = f"""CRITICAL ALERT: {emergency_selected} at USM Campus
-        GPS: {lat}°N, {lon}°E
-        Immediate assistance required."""
-            else:
-                # No GPS data
-                emergency_text = f"CRITICAL ALERT: {emergency_selected} reported at USM Main Campus.  Immediate assistance required.  Coordinates: 5.3567° N, 100.3013° E."
-            
-            emergency_data["text"] = emergency_text
-            
-            # Send to JamAI backend
-            if emergency_data and jamai_client:
-                try:
-                    table_id = TABLE_IDS["text"]
-                    response = add_table_row(table_id, emergency_data)
-                except Exception as e: 
-                    print(f"Background upload failed: {e}")
+            # 后台上传
+            if jamai_client and "upload_done" not in st.session_state:
+                 try:
+                     final_text = f"[{emergency_selected}] User at USM. Status: Critical."
+                     add_table_row(TABLE_IDS["text"], {"text": final_text})
+                     st.session_state.upload_done = True
+                 except: pass
 # =============================================================================
 # TAB 2: MULTI-MODALITY FUSION
 # =============================================================================
