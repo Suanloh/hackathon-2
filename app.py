@@ -8,6 +8,8 @@ from jamaibase import JamAI
 from jamaibase.protocol import MultiRowAddRequest
 import streamlit. components.v1 as components
 import math
+import folium
+from streamlit_folium import st_folium
 
 # =============================================================================
 # 1. 设置避难所数据 (给 Sidebar 用)
@@ -596,10 +598,7 @@ def get_live_location():
     </body>
     </html>
     """
-    components.html(html, height=450)
 
-    components.html(html, height=450)
-    
     # Return the component and capture the value
     component_value = components.html(html, height=650)
     
@@ -624,19 +623,17 @@ recommended actions, and connect with emergency services faster.
 """)
 
 st.divider()
-
 # =============================================================================
 # 3. SIDEBAR (保持列表样式)
 # =============================================================================
-# In your sidebar section: 
 with st.sidebar:
-    st.subheader("📍 Live Status")
+    st. subheader("📍 Live Status")
     
-    # 获取坐标状态
+    # 获取坐标状态 - GET THE LOCATION DATA
     loc = st.session_state.get('emergency_location')
     
     if loc and loc.get('lat'):
-        # 🟢 如果有坐标 (Tab 1 按钮点击后)，显示列表
+        # 🟢 If coordinates exist, show map with all shelters
         user_lat = loc['lat']
         user_lon = loc['lon']
         
@@ -644,36 +641,38 @@ with st.sidebar:
         st.caption(f"Lat: {user_lat:.4f}, Lon: {user_lon:.4f}")
         
         st.divider()
-        st.subheader("🏢 Nearby Safe Zones")
         
-        # 这里的代码负责算出所有避难所的距离，并排序
-        shelter_list_with_dist = []
+        # Create simple map showing all shelters
+        import folium
+        from streamlit_folium import st_folium
+        
+        m = folium.Map(location=[5.3565, 100.2985], zoom_start=14)
+        
+        # Add all shelter markers
         for s in SHELTERS:
-            dist = calculate_distance_py(user_lat, user_lon, s['lat'], s['lon'])
-            shelter_list_with_dist.append({**s, "dist": dist})
+            folium. Marker(
+                [s['lat'], s['lon']],
+                popup=f"{s['name']}<br>{s['type']}",
+                icon=folium. Icon(color='green')
+            ).add_to(m)
         
-        # 按距离排序
-        shelter_list_with_dist.sort(key=lambda x: x['dist'])
+        # Add user location marker
+        folium.Marker(
+            [user_lat, user_lon],
+            popup="📍 You are here",
+            icon=folium.Icon(color='red')
+        ).add_to(m)
         
-        # 显示列表
-        for s in shelter_list_with_dist:
-            if s == shelter_list_with_dist[0]:
-                st.markdown(f"**🌟 {s['name']} (NEAREST)**")
-                st.progress(100, text="Recommended")
-            else:
-                st.markdown(f"**{s['name']}**")
-            
-            st.caption(f"📏 {s['dist']}m away • Type: {s['type']}")
-            st.markdown("---")
+        st_folium(m, width=300, height=400)
             
     else:
         # 🔴 如果没有坐标，显示等待状态 (Demo 开始前的状态)
         st.info("📡 Waiting for Alert Signal...")
         st.caption("Click 'CONFIRM' in Emergency Tab to activate tracking.")
         
-        st.divider()
+        st. divider()
         st.subheader("🏢 USM Shelters Database")
-        for s in SHELTERS:
+        for s in SHELTERS: 
              st.text(f"• {s['name']}")
 # =============================================================================
 # MAIN TABS
