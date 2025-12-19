@@ -315,17 +315,17 @@ def get_table_schema(table_id):
         return None
 
 def get_live_location():
-    """Get user's live GPS and show map"""
+    """Get user's live GPS and show map with REAL shelter locations"""
     html = """
-    <!DOCTYPE html>
+    <! DOCTYPE html>
     <html>
     <head>
         <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
         <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
         <style>
-            #map { height: 400px; width: 100%; border-radius: 10px; }
+            #map { height:  400px; width: 100%; border-radius: 10px; }
             .btn { 
-                background:  #ff4444; 
+                background:   #ff4444; 
                 color: white; 
                 padding: 12px 24px; 
                 border: none; 
@@ -337,6 +337,7 @@ def get_live_location():
             }
             .btn:hover { background: #cc0000; }
             .info { padding: 10px; background: #f0f0f0; border-radius: 5px; margin:  10px 0; }
+            .shelter-info { background: #28a745; color: white; padding: 5px; border-radius: 5px; margin-top: 10px; }
         </style>
     </head>
     <body>
@@ -345,6 +346,7 @@ def get_live_location():
             📤 Share Location to Emergency
         </button>
         <div id="info" class="info" style="display:none;"></div>
+        <div id="shelterInfo" class="shelter-info" style="display:none;"></div>
         <div id="map"></div>
         
         <script>
@@ -352,6 +354,16 @@ def get_live_location():
         let marker = null;
         let currentLat = null;
         let currentLon = null;
+        
+        // REAL SHELTER LOCATIONS (USM Penang area)
+        const shelters = [
+            {name: "Dewan Utama USM", lat: 5.3565, lon: 100.2985, capacity: "500 people", type: "Main Hall"},
+            {name: "Dewan Tuanku Syed Putra", lat: 5.3545, lon: 100.3005, capacity: "300 people", type: "Hall"},
+            {name: "Kompleks Sukan USM", lat: 5.3580, lon: 100.2995, capacity: "400 people", type: "Sports Complex"},
+            {name: "Hospital USM", lat: 5.3598, lon: 100.2993, capacity: "Emergency Center", type: "Hospital"},
+            {name: "Masjid USM", lat: 5.3552, lon: 100.3020, capacity: "200 people", type: "Mosque"},
+            {name: "Desasiswa Restu", lat: 5.3620, lon: 100.3010, capacity: "Higher Ground", type: "Dormitory"}
+        ];
         
         function getLocation() {
             if (navigator.geolocation) {
@@ -361,60 +373,137 @@ def get_live_location():
             }
         }
         
+        function calculateDistance(lat1, lon1, lat2, lon2) {
+            const R = 6371e3; // Earth radius in meters
+            const φ1 = lat1 * Math.PI / 180;
+            const φ2 = lat2 * Math. PI / 180;
+            const Δφ = (lat2 - lat1) * Math.PI / 180;
+            const Δλ = (lon2 - lon1) * Math.PI / 180;
+            
+            const a = Math.sin(Δφ/2) * Math.sin(Δφ/2) +
+                     Math.cos(φ1) * Math.cos(φ2) *
+                     Math.sin(Δλ/2) * Math.sin(Δλ/2);
+            const c = 2 * Math. atan2(Math.sqrt(a), Math.sqrt(1-a));
+            
+            return R * c; // Distance in meters
+        }
+        
         function showPosition(position) {
-            currentLat = position.coords.latitude;
+            currentLat = position. coords.latitude;
             currentLon = position.coords.longitude;
             const accuracy = position.coords.accuracy;
             
-            document.getElementById('info').style.display = 'block';
-            document.getElementById('info').innerHTML = 
-                `📍 <b>Your Location:</b><br>
-                Latitude: ${currentLat. toFixed(6)}<br>
-                Longitude: ${currentLon.toFixed(6)}<br>
-                Accuracy: ±${accuracy.toFixed(0)}m`;
-            
-            document.getElementById('shareBtn').style.display = 'inline-block';
-            
+            // Create map
             if (map === null) {
-                map = L.map('map').setView([currentLat, currentLon], 16);
+                map = L.map('map').setView([currentLat, currentLon], 15);
                 L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
                     attribution: '© OpenStreetMap'
                 }).addTo(map);
             } else {
-                map.setView([currentLat, currentLon], 16);
+                map.setView([currentLat, currentLon], 15);
             }
             
+            // Add user marker (RED)
             if (marker !== null) {
                 map.removeLayer(marker);
             }
-            marker = L.marker([currentLat, currentLon]).addTo(map)
-                .bindPopup('📍 You are here!').openPopup();
+            marker = L.marker([currentLat, currentLon], {
+                icon: L.icon({
+                    iconUrl: 'https://raw.githubusercontent.com/pointhi/leaflet-color-markers/master/img/marker-icon-2x-red.png',
+                    iconSize: [25, 41],
+                    iconAnchor: [12, 41],
+                    popupAnchor: [1, -34]
+                })
+            }).addTo(map)
+                .bindPopup('<b>📍 You are here! </b>').openPopup();
             
+            // Add accuracy circle
             L.circle([currentLat, currentLon], {
-                color: 'blue',
-                fillColor: '#3399ff',
-                fillOpacity:  0.2,
+                color: 'red',
+                fillColor: '#f03',
+                fillOpacity: 0.2,
                 radius: accuracy
             }).addTo(map);
+            
+            // Find nearest shelter
+            let nearestShelter = null;
+            let minDistance = Infinity;
+            
+            // Add all shelter markers (GREEN)
+            shelters.forEach(shelter => {
+                const distance = calculateDistance(currentLat, currentLon, shelter.lat, shelter.lon);
+                
+                if (distance < minDistance) {
+                    minDistance = distance;
+                    nearestShelter = shelter;
+                }
+                
+                const shelterMarker = L.marker([shelter. lat, shelter.lon], {
+                    icon: L.icon({
+                        iconUrl: 'https://raw.githubusercontent.com/pointhi/leaflet-color-markers/master/img/marker-icon-2x-green.png',
+                        iconSize: [25, 41],
+                        iconAnchor: [12, 41],
+                        popupAnchor: [1, -34]
+                    })
+                }).addTo(map);
+                
+                shelterMarker.bindPopup(`
+                    <b>🏢 ${shelter.name}</b><br>
+                    Type: ${shelter.type}<br>
+                    Capacity: ${shelter.capacity}<br>
+                    Distance: ${(distance / 1000).toFixed(2)} km
+                `);
+            });
+            
+            // Draw route to nearest shelter
+            if (nearestShelter) {
+                L.polyline([
+                    [currentLat, currentLon],
+                    [nearestShelter.lat, nearestShelter.lon]
+                ], {
+                    color: 'blue',
+                    weight: 4,
+                    opacity: 0.7,
+                    dashArray: '10, 10'
+                }).addTo(map).bindPopup('Route to nearest shelter');
+            }
+            
+            // Show info
+            document.getElementById('info').style.display = 'block';
+            document.getElementById('info').innerHTML = 
+                `📍 <b>Your Location:</b><br>
+                Latitude: ${currentLat.toFixed(6)}<br>
+                Longitude: ${currentLon.toFixed(6)}<br>
+                Accuracy: ±${accuracy. toFixed(0)}m`;
+            
+            // Show nearest shelter info
+            if (nearestShelter) {
+                document.getElementById('shelterInfo').style.display = 'block';
+                document.getElementById('shelterInfo').innerHTML = 
+                    `🏢 <b>Nearest Shelter:  ${nearestShelter.name}</b><br>
+                    📏 Distance: ${(minDistance / 1000).toFixed(2)} km (${Math.round(minDistance)}m)<br>
+                    👥 Capacity: ${nearestShelter.capacity}<br>
+                    ⏱️ Est. Walk Time: ${Math.round(minDistance / 83)} minutes`;
+            }
+            
+            document.getElementById('shareBtn').style.display = 'inline-block';
         }
         
         function shareLocation() {
             if (currentLat && currentLon) {
                 alert('✅ Location sent to Emergency Department!');
-                console.log('Shared:', currentLat, currentLon);
             }
         }
         
         function showError(error) {
-            alert("Location access denied or unavailable");
+            alert("Please allow location access");
         }
         </script>
     </body>
     </html>
     """
     
-    components.html(html, height=550)
-
+    components.html(html, height=650)
 # =============================================================================
 # PAGE HEADER
 # =============================================================================
